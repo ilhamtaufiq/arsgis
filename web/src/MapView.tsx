@@ -1,126 +1,91 @@
 import { useEffect, useRef } from 'react'
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
-import type { StyleSpecification } from 'maplibre-gl'
+import L from 'leaflet'
+import type { FeatureCollection } from 'geojson'
+import 'leaflet/dist/leaflet.css'
 import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
 
-// Basemap sementara: latar polos tanpa tile pihak ketiga. PMTiles self-hosted menyusul (lihat rencana).
-const STYLE: StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eef1f4' } }],
-}
-
-const SOURCE = 'jaringan'
+const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 
 type Props = {
   features: PipeFeature[]
   onBboxChange: (bbox: Bbox) => void
 }
 
-function toBbox(map: maplibregl.Map): Bbox {
+function toBbox(map: L.Map): Bbox {
   const b = map.getBounds()
   return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }
 }
 
+// Lebar pipa mengikuti diameter: 15 mm → 1.5 px, 150 mm → 6 px, di luar rentang itu dijepit.
+function pipeWeight(diameterMm: number | null) {
+  const d = diameterMm ?? 50
+  return Math.min(6, Math.max(1.5, 1.5 + ((d - 15) * 4.5) / 135))
+}
+
+function pointStyle(type: string): L.CircleMarkerOptions {
+  switch (type) {
+    case 'valve':
+      return { radius: 6, color: '#111111', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }
+    case 'reservoir':
+      return { radius: 10, color: '#ffffff', weight: 2, fillColor: '#0f766e', fillOpacity: 1 }
+    case 'bronkaptering':
+      return { radius: 9, color: '#ffffff', weight: 2, fillColor: '#0891b2', fillOpacity: 1 }
+    default:
+      // Sambungan rumah (sr)
+      return { radius: 4, stroke: false, fillColor: '#a16207', fillOpacity: 1 }
+  }
+}
+
 export function MapView({ features, onBboxChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<maplibregl.Map | null>(null)
+  const layerRef = useRef<L.GeoJSON | null>(null)
   const onBboxChangeRef = useRef(onBboxChange)
   onBboxChangeRef.current = onBboxChange
 
   useEffect(() => {
     if (!container.current) return
-    const map = new maplibregl.Map({
-      container: container.current,
-      style: STYLE,
-      center: [107.14, -6.82],
-      zoom: 13,
-      attributionControl: false,
-    })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    mapRef.current = map
+    const map = L.map(container.current, { center: [-6.82, 107.14], zoom: 13 })
+    L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map)
 
-    map.on('load', () => {
-      map.addSource(SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+    const layer = L.geoJSON(undefined, {
+      style: (feature) => {
+        const p = (feature as PipeFeature).properties
+        return {
+          color: p.kondisi === 'perlu cek' ? '#d9603b' : '#1d4ed8',
+          weight: pipeWeight(p.diameter_mm),
+          lineCap: 'round',
+          lineJoin: 'round',
+        }
+      },
+      pointToLayer: (feature, latlng) => L.circleMarker(latlng, pointStyle((feature as PipeFeature).properties.feature_type)),
+      onEachFeature: (feature, l) => {
+        l.on('click', (e) => {
+          // Klik pada fitur tidak boleh ikut dianggap klik kosong di peta.
+          L.DomEvent.stopPropagation(e)
+          useMapStore.getState().select(feature as PipeFeature)
+        })
+      },
+    }).addTo(map)
 
-      map.addLayer({
-        id: 'pipa',
-        type: 'line',
-        source: SOURCE,
-        filter: ['==', ['get', 'feature_type'], 'pipa'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': ['match', ['get', 'kondisi'], 'perlu cek', '#d9603b', '#1d4ed8'],
-          'line-width': ['interpolate', ['linear'], ['coalesce', ['get', 'diameter_mm'], 50], 15, 1.5, 150, 6],
-        },
-      })
-      map.addLayer({
-        id: 'valve',
-        type: 'circle',
-        source: SOURCE,
-        filter: ['==', ['get', 'feature_type'], 'valve'],
-        paint: { 'circle-radius': 6, 'circle-color': '#ffffff', 'circle-stroke-color': '#111111', 'circle-stroke-width': 2 },
-      })
-      map.addLayer({
-        id: 'reservoir',
-        type: 'circle',
-        source: SOURCE,
-        filter: ['==', ['get', 'feature_type'], 'reservoir'],
-        paint: { 'circle-radius': 10, 'circle-color': '#0f766e', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
-      })
-      map.addLayer({
-        id: 'bronkaptering',
-        type: 'circle',
-        source: SOURCE,
-        filter: ['==', ['get', 'feature_type'], 'bronkaptering'],
-        paint: { 'circle-radius': 9, 'circle-color': '#0891b2', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
-      })
-      map.addLayer({
-        id: 'sr',
-        type: 'circle',
-        source: SOURCE,
-        filter: ['==', ['get', 'feature_type'], 'sr'],
-        paint: { 'circle-radius': 4, 'circle-color': '#a16207' },
-      })
+    map.on('click', () => useMapStore.getState().select(null))
+    map.on('moveend', () => onBboxChangeRef.current(toBbox(map)))
+    onBboxChangeRef.current(toBbox(map))
 
-      onBboxChangeRef.current(toBbox(map))
-    })
-
-    map.on('moveend', () => {
-      if (map.isStyleLoaded()) onBboxChangeRef.current(toBbox(map))
-    })
-
-    const pickable = ['pipa', 'valve', 'reservoir', 'bronkaptering', 'sr']
-    map.on('click', (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: pickable })
-      const hit = hits[0]
-      if (!hit) {
-        useMapStore.getState().select(null)
-        return
-      }
-      useMapStore.getState().select({
-        type: 'Feature',
-        id: Number(hit.id ?? hit.properties?.id),
-        geometry: hit.geometry,
-        properties: hit.properties as PipeFeature['properties'],
-      } as PipeFeature)
-    })
-    map.on('mouseenter', pickable[0], () => (map.getCanvas().style.cursor = 'pointer'))
-    map.on('mouseleave', pickable[0], () => (map.getCanvas().style.cursor = ''))
-
+    layerRef.current = layer
     return () => {
       map.remove()
-      mapRef.current = null
+      layerRef.current = null
     }
   }, [])
 
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
-    const source = map.getSource<maplibregl.GeoJSONSource>(SOURCE)
-    source?.setData({ type: 'FeatureCollection', features })
+    const layer = layerRef.current
+    if (!layer) return
+    layer.clearLayers()
+    const collection: FeatureCollection = { type: 'FeatureCollection', features }
+    layer.addData(collection)
   }, [features])
 
   return <div ref={container} className="map" />

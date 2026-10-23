@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/InfoPanel.tsx","./src/LayerSwitcher.tsx","./src/MapView.tsx","./src/api.ts","./src/main.tsx","./src/store.ts","./src/types.ts","./vite.config.ts"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/Auth.tsx","./src/InfoPanel.tsx","./src/LayerSwitcher.tsx","./src/MapView.tsx","./src/api.ts","./src/main.tsx","./src/store.ts","./src/types.ts","./vite.config.ts"],"version":"5.9.3"}
