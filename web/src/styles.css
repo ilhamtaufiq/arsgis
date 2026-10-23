@@ -1,0 +1,32 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; color: #111; background: #fff; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; flex-wrap: wrap; }
+.top h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+.top p { margin: 2px 0 0; color: #6b7280; font-size: 13px; }
+
+.layers { border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 12px; margin: 0; display: flex; gap: 12px; flex-wrap: wrap; }
+.layers legend { font-size: 12px; color: #6b7280; padding: 0 4px; }
+.layer-row { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+
+.stage { position: relative; flex: 1; min-height: 0; }
+.map { position: absolute; inset: 0; }
+
+.info { position: absolute; left: 16px; bottom: 16px; width: min(320px, calc(100% - 32px)); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); font-size: 14px; }
+.info.empty { color: #6b7280; }
+.info-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.info-head button { border: 0; background: transparent; font-size: 20px; cursor: pointer; line-height: 1; }
+.info dl { margin: 0; display: grid; gap: 6px; }
+.info dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.info dt { color: #6b7280; }
+.info dd { margin: 0; text-align: right; }
+
+.banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; padding: 8px 14px; border-radius: 10px; font-size: 14px; }
+.status { position: absolute; top: 12px; right: 12px; background: #111; color: #fff; padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+
+@media (max-width: 600px) {
+  .top h1 { font-size: 18px; }
+  .info { left: 8px; right: 8px; width: auto; bottom: 8px; }
+}
