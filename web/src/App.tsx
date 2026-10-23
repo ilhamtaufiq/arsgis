@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchFeatures, fetchNetworks } from './api'
+import { AuthPanel } from './Auth'
+import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
 import { InfoPanel } from './InfoPanel'
 import { LayerSwitcher } from './LayerSwitcher'
 import { MapView } from './MapView'
 import { useMapStore } from './store'
-import type { Bbox } from './types'
+import type { Bbox, FeatureType } from './types'
 
 export function App() {
   const networkId = useMapStore((s) => s.networkId)
@@ -18,17 +18,21 @@ export function App() {
   const select = useMapStore((s) => s.select)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  const user = me.data ?? null
+  const customerAllowed = canSeeCustomerData(user)
 
   const firstNetwork = networks.data?.[0]?.id
   if (networkId === null && firstNetwork !== undefined) setNetwork(firstNetwork)
 
-  // Jenis yang dikirim ke server: hanya layer yang aktif, supaya data sr tidak ikut bila nonaktif.
-  const typesKey = useMemo(() => [...layers].sort().join(','), [layers])
+  // Sr hanya ikut diminta bila peran mengizinkan, supaya data pelanggan tidak dikirim ke pengunjung.
+  const activeLayers: FeatureType[] = layers.filter((t) => customerAllowed || t !== 'sr')
+  const typesKey = [...activeLayers].sort().join(',')
 
   const features = useQuery({
-    queryKey: ['features', networkId, typesKey, bboxKey(bbox)],
+    queryKey: ['features', networkId, typesKey, bboxKey(bbox), user?.role ?? 'anon'],
     queryFn: ({ signal }) => fetchFeatures(networkId!, bbox!, typesKey ? typesKey.split(',') : [], signal),
-    enabled: networkId !== null && bbox !== null && typesKey !== '',
+    enabled: networkId !== null && bbox !== null && typesKey !== '' && !me.isPending,
     placeholderData: (prev) => prev,
   })
 
@@ -41,7 +45,10 @@ export function App() {
           <h1>arsgis</h1>
           <p>WebGIS perpipaan SPAM · {networks.data?.[0]?.nama ?? 'memuat jaringan…'}</p>
         </div>
-        <LayerSwitcher active={layers} onToggle={toggleLayer} />
+        <div className="top-controls">
+          <LayerSwitcher active={activeLayers} canSeeCustomerData={customerAllowed} onToggle={toggleLayer} />
+          <AuthPanel user={user} />
+        </div>
       </header>
 
       <main className="stage">

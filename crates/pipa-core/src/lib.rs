@@ -10,6 +10,8 @@ pub enum CoreError {
     UnknownFeatureType(String),
     #[error("bbox tidak valid: {0}")]
     InvalidBbox(String),
+    #[error("peran tidak dikenal: {0}")]
+    UnknownRole(String),
 }
 
 /// Jenis fitur jaringan. Nilainya disimpan sebagai teks di kolom `features.feature_type`.
@@ -53,6 +55,47 @@ impl FeatureType {
     pub fn is_customer_data(self) -> bool {
         matches!(self, FeatureType::Sr)
     }
+}
+
+/// Peran pengguna. Urutan dari yang paling terbatas ke yang paling luas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Viewer,
+    Editor,
+    Admin,
+}
+
+impl Role {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::Viewer => "viewer",
+            Role::Editor => "editor",
+            Role::Admin => "admin",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self, CoreError> {
+        match s {
+            "viewer" => Ok(Role::Viewer),
+            "editor" => Ok(Role::Editor),
+            "admin" => Ok(Role::Admin),
+            other => Err(CoreError::UnknownRole(other.to_string())),
+        }
+    }
+
+    /// Data pelanggan (sr) hanya untuk editor dan admin.
+    pub fn can_read(self, t: FeatureType) -> bool {
+        !t.is_customer_data() || self >= Role::Editor
+    }
+}
+
+/// Peran `None` berarti pengunjung tanpa login.
+pub fn can_read_types(role: Option<Role>, types: &[FeatureType]) -> bool {
+    types.iter().all(|t| match role {
+        Some(r) => r.can_read(*t),
+        None => !t.is_customer_data(),
+    })
 }
 
 /// Kotak batas dalam derajat WGS84, urutan `w,s,e,n` (kiri, bawah, kanan, atas).
@@ -139,6 +182,19 @@ mod tests {
         assert!(Bbox::parse("abc,1,2,3").is_err());
         assert!(Bbox::parse("0,0,200,10").is_err()); // di luar rentang
         assert!(Bbox::parse("100,-6,110,-4").is_err()); // lebih dari 2 derajat
+    }
+
+    #[test]
+    fn role_gates_customer_data() {
+        assert!(Role::Editor.can_read(FeatureType::Sr));
+        assert!(Role::Admin.can_read(FeatureType::Sr));
+        assert!(!Role::Viewer.can_read(FeatureType::Sr));
+        assert!(Role::Viewer.can_read(FeatureType::Pipa));
+        assert!(can_read_types(None, &[FeatureType::Pipa, FeatureType::Valve]));
+        assert!(!can_read_types(None, &[FeatureType::Pipa, FeatureType::Sr]));
+        assert!(can_read_types(Some(Role::Editor), &[FeatureType::Sr]));
+        assert_eq!(Role::parse("admin").unwrap(), Role::Admin);
+        assert!(Role::parse("root").is_err());
     }
 
     #[test]

@@ -145,3 +145,47 @@ fn feature_from_row(r: &PgRow) -> Result<FeatureRow, StoreError> {
         geometry,
     })
 }
+
+#[derive(Debug, Clone)]
+pub struct UserRow {
+    pub id: i64,
+    pub username: String,
+    pub password_hash: String,
+    pub role: String,
+    pub active: bool,
+}
+
+impl Store {
+    pub async fn find_user(&self, username: &str) -> Result<Option<UserRow>, StoreError> {
+        let row = sqlx::query(
+            "SELECT id, username, password_hash, role, active FROM users WHERE username = $1",
+        )
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| UserRow {
+            id: r.get("id"),
+            username: r.get("username"),
+            password_hash: r.get("password_hash"),
+            role: r.get("role"),
+            active: r.get("active"),
+        }))
+    }
+
+    pub async fn create_user(
+        &self,
+        username: &str,
+        password_hash: &str,
+        role: &str,
+    ) -> Result<i64, StoreError> {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id",
+        )
+        .bind(username)
+        .bind(password_hash)
+        .bind(role)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(id)
+    }
+}
