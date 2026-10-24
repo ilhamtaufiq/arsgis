@@ -192,7 +192,7 @@ async fn network_geojson(
     Ok(response)
 }
 
-fn router(state: AppState, web_dist: PathBuf) -> Router {
+fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
 
@@ -203,6 +203,8 @@ fn router(state: AppState, web_dist: PathBuf) -> Router {
         .route("/api/v1/auth/me", get(me))
         .route("/api/v1/networks", get(list_networks))
         .route("/api/v1/networks/{id}/geojson", get(network_geojson))
+        // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
+        .nest_service("/basemap", ServeDir::new(basemap_dir))
         .fallback_service(spa)
         .layer(CompressionLayer::new().gzip(true).br(true))
         .layer(TraceLayer::new_for_http())
@@ -268,7 +270,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("migrasi selesai");
 
     let state = AppState { store, jwt_secret: jwt_secret()?, cookie_secure };
-    let app = router(state, web_dist);
+    let basemap_dir = PathBuf::from(env::var("BASEMAP_DIR").unwrap_or_else(|_| "data".into()));
+    let app = router(state, web_dist, basemap_dir);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("pipa-api mendengarkan di {addr}");

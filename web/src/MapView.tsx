@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import type { FeatureCollection } from 'geojson'
 import 'leaflet/dist/leaflet.css'
+import { leafletLayer } from 'protomaps-leaflet'
 import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
 
-const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+// Basemap PMTiles self-hosted (diekstrak dari OSM, disajikan backend di /basemap).
+const BASEMAP_URL = '/basemap/basemap-ciranjang.pmtiles'
+const BASEMAP_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://protomaps.com">Protomaps</a>'
 
 type Props = {
   features: PipeFeature[]
@@ -47,7 +50,7 @@ export function MapView({ features, onBboxChange }: Props) {
   useEffect(() => {
     if (!container.current) return
     const map = L.map(container.current, { center: [-6.82, 107.14], zoom: 13 })
-    L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map)
+    leafletLayer({ url: BASEMAP_URL, flavor: 'light', lang: 'id', attribution: BASEMAP_ATTRIBUTION }).addTo(map)
 
     const layer = L.geoJSON(undefined, {
       style: (feature) => {

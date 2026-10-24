@@ -2,3 +2,6 @@ target/
 web/node_modules/
 web/dist/
 .env
+
+# Basemap PMTiles hasil ekstrak (lihat README)
+data/*.pmtiles
