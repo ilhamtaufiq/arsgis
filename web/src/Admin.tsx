@@ -1,10 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
 import { fetchMe, fetchNetworks, type Role } from './api'
 import { AuthPanel } from './Auth'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type AdminUser = { id: number; username: string; role: Role; active: boolean; created_at: string }
 type AdminImport = { id: number; nama_file: string; status: string; network_id: number | null; dibuat_oleh: string; jumlah_fitur: number | null; waktu: string }
+
+const ROLES: Role[] = ['viewer', 'editor', 'admin']
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -19,48 +30,74 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>
 }
 
-type Tab = 'pengguna' | 'jaringan' | 'impor'
-
 /** Halaman admin: kelola pengguna, jaringan, dan memantau impor. Hanya untuk admin. */
 export function AdminPage() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  const [tab, setTab] = useState<Tab>('pengguna')
   const user = me.data ?? null
 
   return (
-    <div className="dash-page">
-      <header className="dash-page-head">
-        <a className="back" href="/">← Peta</a>
-        <div className="dash-title">
-          <h1>Admin</h1>
-          <a className="back" href="/dashboard">Dashboard jaringan</a>
-        </div>
-        <div className="dash-auth">
+    <div className="min-h-full bg-[#EBEBEB] text-foreground">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+        <header className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" asChild className="rounded-full bg-white">
+            <a href="/">
+              <ArrowLeft />
+              Peta
+            </a>
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-semibold tracking-tight">Admin arsgis</h1>
+            <p className="text-sm text-muted-foreground">Kelola pengguna, jaringan, dan impor</p>
+          </div>
+          <Button variant="outline" size="sm" asChild className="rounded-full bg-white">
+            <a href="/dashboard">Dashboard</a>
+          </Button>
           <AuthPanel user={user} />
-        </div>
-      </header>
+        </header>
 
-      {me.isPending ? null : user?.role !== 'admin' ? (
-        <section className="dash-block">
-          <p className="dash-note">
-            {user ? 'Halaman ini hanya untuk admin.' : 'Masuk dengan akun admin untuk membuka halaman ini.'}
-          </p>
-        </section>
-      ) : (
-        <>
-          <nav className="tabs" role="tablist">
-            {(['pengguna', 'jaringan', 'impor'] as Tab[]).map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'is-active' : ''} onClick={() => setTab(t)}>
-                {t === 'pengguna' ? 'Pengguna' : t === 'jaringan' ? 'Jaringan' : 'Impor'}
-              </button>
-            ))}
-          </nav>
-          {tab === 'pengguna' && <UsersTab currentUser={user.username} />}
-          {tab === 'jaringan' && <NetworksTab />}
-          {tab === 'impor' && <ImportsTab />}
-        </>
-      )}
+        {me.isPending ? null : user?.role !== 'admin' ? (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              {user ? 'Halaman ini hanya untuk admin.' : 'Masuk dengan akun admin untuk membuka halaman ini.'}
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs defaultValue="pengguna">
+            <TabsList>
+              <TabsTrigger value="pengguna">Pengguna</TabsTrigger>
+              <TabsTrigger value="jaringan">Jaringan</TabsTrigger>
+              <TabsTrigger value="impor">Impor</TabsTrigger>
+            </TabsList>
+            <TabsContent value="pengguna" className="flex flex-col gap-4">
+              <UsersTab currentUser={user.username} />
+            </TabsContent>
+            <TabsContent value="jaringan" className="flex flex-col gap-4">
+              <NetworksTab />
+            </TabsContent>
+            <TabsContent value="impor" className="flex flex-col gap-4">
+              <ImportsTab />
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
     </div>
+  )
+}
+
+function RoleSelect({ value, label, onChange }: { value: Role; label: string; onChange: (r: Role) => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as Role)}>
+      <SelectTrigger size="sm" className="w-28" aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ROLES.map((r) => (
+          <SelectItem key={r} value={r}>
+            {r}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -100,59 +137,76 @@ function UsersTab({ currentUser }: { currentUser: string }) {
 
   return (
     <>
-      <section className="dash-block">
-        <h3 className="dash-section">Buat pengguna</h3>
-        <form className="admin-form" onSubmit={handleCreate}>
-          <input placeholder="Username" aria-label="Username baru" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
-          <input type="password" placeholder="Password (min. 10)" aria-label="Password baru" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-          <select aria-label="Peran baru" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
-            <option value="admin">admin</option>
-          </select>
-          <button type="submit" className="admin-primary" disabled={create.isPending}>Buat</button>
-        </form>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Buat pengguna</CardTitle>
+          <CardDescription>Password minimal 10 karakter. Akun baru langsung bisa dipakai untuk masuk.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end" onSubmit={handleCreate}>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-username">Username</Label>
+              <Input id="new-username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-password">Password</Label>
+              <Input id="new-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Peran</Label>
+              <RoleSelect value={form.role} label="Peran baru" onChange={(role) => setForm({ ...form, role })} />
+            </div>
+            <Button type="submit" disabled={create.isPending}>
+              Buat
+            </Button>
+          </form>
+          {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        </CardContent>
+      </Card>
 
-      {error && <p className="modal-error">{error}</p>}
-
-      <section className="dash-block">
-        <h3 className="dash-section">Daftar pengguna</h3>
-        {users.data && (
-          <div className="dash-table-wrap">
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Peran</th>
-                  <th>Status</th>
-                  <th>Dibuat</th>
-                </tr>
-              </thead>
-              <tbody>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Daftar pengguna</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {users.data && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Peran</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Dibuat</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {users.data.map((u) => (
-                  <tr key={u.id}>
-                    <td>{u.username}{u.username === currentUser && <small className="you"> (Anda)</small>}</td>
-                    <td>
-                      <select aria-label={`Peran ${u.username}`} value={u.role} onChange={(e) => update.mutate({ id: u.id, patch: { role: e.target.value as Role } })}>
-                        <option value="viewer">viewer</option>
-                        <option value="editor">editor</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </td>
-                    <td>
-                      <button type="button" className={`pill ${u.active ? 'on' : 'off'}`} onClick={() => update.mutate({ id: u.id, patch: { active: !u.active } })}>
+                  <TableRow key={u.id}>
+                    <TableCell className="font-medium">
+                      {u.username}
+                      {u.username === currentUser && <span className="ml-1.5 text-xs text-muted-foreground">(Anda)</span>}
+                    </TableCell>
+                    <TableCell>
+                      <RoleSelect value={u.role} label={`Peran ${u.username}`} onChange={(role) => update.mutate({ id: u.id, patch: { role } })} />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={u.active ? 'secondary' : 'outline'}
+                        className="rounded-full"
+                        onClick={() => update.mutate({ id: u.id, patch: { active: !u.active } })}
+                      >
                         {u.active ? 'Aktif' : 'Nonaktif'}
-                      </button>
-                    </td>
-                    <td>{u.created_at}</td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{u.created_at}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </>
   )
 }
@@ -177,27 +231,51 @@ function NetworksTab() {
 
   return (
     <>
-      <section className="dash-block">
-        <h3 className="dash-section">Buat jaringan</h3>
-        <form className="admin-form" onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
-          <input placeholder="Nama jaringan" aria-label="Nama jaringan" value={nama} onChange={(e) => setNama(e.target.value)} required />
-          <input placeholder="Deskripsi (opsional)" aria-label="Deskripsi jaringan" value={deskripsi} onChange={(e) => setDeskripsi(e.target.value)} />
-          <button type="submit" className="admin-primary" disabled={create.isPending}>Buat</button>
-        </form>
-        {error && <p className="modal-error">{error}</p>}
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Buat jaringan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); create.mutate() }}>
+            <div className="grid gap-1.5">
+              <Label htmlFor="net-nama">Nama jaringan</Label>
+              <Input id="net-nama" value={nama} onChange={(e) => setNama(e.target.value)} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="net-deskripsi">Deskripsi (opsional)</Label>
+              <Input id="net-deskripsi" value={deskripsi} onChange={(e) => setDeskripsi(e.target.value)} />
+            </div>
+            <Button type="submit" disabled={create.isPending}>
+              Buat
+            </Button>
+          </form>
+          {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        </CardContent>
+      </Card>
 
-      <section className="dash-block">
-        <h3 className="dash-section">Daftar jaringan</h3>
-        <ul className="dash-list">
-          {networks.data?.map((n) => (
-            <li key={n.id}>
-              <span>{n.nama}</span>
-              <small className="muted">{n.deskripsi ?? ''}</small>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Daftar jaringan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nama</TableHead>
+                <TableHead>Deskripsi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {networks.data?.map((n) => (
+                <TableRow key={n.id}>
+                  <TableCell className="font-medium">{n.nama}</TableCell>
+                  <TableCell className="text-muted-foreground">{n.deskripsi ?? '–'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </>
   )
 }
@@ -209,35 +287,42 @@ function ImportsTab() {
   })
 
   return (
-    <section className="dash-block">
-      <h3 className="dash-section">Semua impor</h3>
-      {imports.data?.length === 0 && <p className="dash-note">Belum ada impor.</p>}
-      {imports.data && imports.data.length > 0 && (
-        <div className="dash-table-wrap">
-          <table className="dash-table">
-            <thead>
-              <tr>
-                <th>Berkas</th>
-                <th>Oleh</th>
-                <th>Fitur</th>
-                <th>Status</th>
-                <th>Waktu</th>
-              </tr>
-            </thead>
-            <tbody>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Semua impor</CardTitle>
+        <CardDescription>Termasuk batch yang belum disimpan ke jaringan.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {imports.data?.length === 0 && <p className="text-sm text-muted-foreground">Belum ada impor.</p>}
+        {imports.data && imports.data.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Berkas</TableHead>
+                <TableHead>Oleh</TableHead>
+                <TableHead className="text-right">Fitur</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Waktu</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {imports.data.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.nama_file}</td>
-                  <td>{i.dibuat_oleh}</td>
-                  <td>{i.jumlah_fitur ?? '–'}</td>
-                  <td>{i.status === 'committed' ? 'Disimpan' : 'Menunggu'}</td>
-                  <td>{i.waktu}</td>
-                </tr>
+                <TableRow key={i.id}>
+                  <TableCell className="max-w-56 truncate">{i.nama_file}</TableCell>
+                  <TableCell>{i.dibuat_oleh}</TableCell>
+                  <TableCell className="text-right tabular-nums">{i.jumlah_fitur ?? '–'}</TableCell>
+                  <TableCell>
+                    <Badge variant={i.status === 'committed' ? 'default' : 'secondary'}>
+                      {i.status === 'committed' ? 'Disimpan' : 'Menunggu'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{i.waktu}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }
