@@ -5,14 +5,18 @@ html, body, #root { height: 100%; margin: 0; }
   --surface: rgba(255, 255, 255, 0.94);
   --border: rgba(15, 23, 42, 0.08);
   --shadow: 0 4px 18px rgba(15, 23, 42, 0.14);
-  --ink: #111827;
+  --ink: #333333;
+  /* Palet Tangerine dari Arumanis (primary oklch 0.64 0.17 36.44) */
+  --primary: #DF5E3A;
+  --primary-soft: #FAD9CF;
+  --destructive: #F14444;
   --muted: #6b7280;
 }
 
 body {
   font-family: Inter, system-ui, sans-serif;
   color: var(--ink);
-  background: #eef1f4;
+  background: #EBEBEB;
 }
 
 .app { height: 100%; }
@@ -80,6 +84,7 @@ body {
   color: #fff;
 }
 .island-bar input::placeholder { color: #6b7280; }
+.island-bar input { caret-color: var(--primary); }
 .island.is-expanded .island-bar { border-radius: 26px 26px 14px 14px; }
 .island-results,
 .island-empty {
@@ -162,13 +167,13 @@ body {
   font-size: 14px;
   outline: 0;
 }
-.field input:focus { border-color: #111827; box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.1); }
+.field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .modal-error { margin: 0; padding: 8px 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 13px; }
 .modal-submit {
   border: 0;
   border-radius: 999px;
   padding: 12px;
-  background: #0b0b0f;
+  background: var(--primary);
   color: #fff;
   font: inherit;
   font-size: 14px;
@@ -178,7 +183,7 @@ body {
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
 
-.auth-primary { background: #0b0b0f !important; color: #fff !important; }
+.auth-primary { background: var(--primary); color: #fff; }
 
 /* Tombol bulat di sisi kanan */
 .toolbar {
@@ -202,7 +207,7 @@ body {
   box-shadow: var(--shadow);
   cursor: pointer;
 }
-.round[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.round[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 
 .float-right {
@@ -294,7 +299,7 @@ body {
   box-shadow: var(--shadow);
 }
 .banner { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
-.status { background: var(--ink); color: #fff; }
+.status { background: var(--primary); color: #fff; }
 
 /* Kartu info fitur di kanan bawah */
 .info {
