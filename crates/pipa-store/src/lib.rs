@@ -345,11 +345,11 @@ impl Store {
             .collect())
     }
 
-    /// Jumlah dan panjang geodetik pipa per fungsi. Pipa tanpa fungsi dihitung sebagai distribusi.
+    /// Jumlah dan panjang pipa per fungsi (dari kolom `panjang_m`). Pipa tanpa fungsi dihitung sebagai distribusi.
     pub async fn pipa_lengths(&self, network_id: i64) -> Result<Vec<PipaLength>, StoreError> {
         let rows = sqlx::query(
             "SELECT COALESCE(fungsi, 'distribusi') AS fungsi, COUNT(*) AS jumlah, \
-                    COALESCE(SUM(ST_Length(geom::geography)), 0)::float8 / 1000.0 AS km \
+                    COALESCE(SUM(panjang_m), 0)::float8 / 1000.0 AS km \
              FROM features \
              WHERE network_id = $1 AND feature_type = 'pipa' AND deleted_at IS NULL \
              GROUP BY 1 ORDER BY 1",
