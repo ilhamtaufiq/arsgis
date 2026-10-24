@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { fetchMe, fetchNetworks } from './api'
+import { AuthPanel } from './Auth'
 import { fetchDashboard } from './dashboardApi'
 
 const JENIS: Record<string, { label: string; color: string }> = {
@@ -11,22 +14,18 @@ const JENIS: Record<string, { label: string; color: string }> = {
 
 const FUNGSI: Record<string, string> = { transmisi: 'Transmisi', distribusi: 'Distribusi' }
 
-type Props = {
-  networkId: number | null
-  open: boolean
-  onClose: () => void
-  role: string | null
-}
+/** Halaman dashboard jaringan, dibuka di /dashboard. */
+export function DashboardPage() {
+  const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  const [chosen, setChosen] = useState<number | null>(null)
+  const networkId = chosen ?? networks.data?.[0]?.id ?? null
 
-/** Dashboard jaringan: jumlah fitur, panjang pipa, dan riwayat impor (editor dan admin). */
-export function Dashboard({ networkId, open, onClose, role }: Props) {
   const data = useQuery({
-    queryKey: ['dashboard', networkId, role ?? 'anon'],
+    queryKey: ['dashboard', networkId],
     queryFn: () => fetchDashboard(networkId!),
-    enabled: open && networkId !== null,
+    enabled: networkId !== null,
   })
-
-  if (!open) return null
 
   const fitur = data.data?.fitur ?? []
   const total = fitur.reduce((sum, f) => sum + f.jumlah, 0)
@@ -34,34 +33,45 @@ export function Dashboard({ networkId, open, onClose, role }: Props) {
   const totalKm = pipa.reduce((sum, p) => sum + p.km, 0)
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="dash" role="dialog" aria-modal="true" aria-labelledby="dash-title" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="dash-head">
-          <div>
-            <h2 id="dash-title">Dashboard</h2>
+    <div className="dash-page">
+      <header className="dash-page-head">
+        <a className="back" href="/">← Peta</a>
+        <div className="dash-title">
+          <h1>Dashboard</h1>
+          {networks.data && networks.data.length > 1 ? (
+            <select aria-label="Pilih jaringan" value={networkId ?? ''} onChange={(e) => setChosen(Number(e.target.value))}>
+              {networks.data.map((n) => (
+                <option key={n.id} value={n.id}>{n.nama}</option>
+              ))}
+            </select>
+          ) : (
             <p>{data.data?.jaringan ?? 'Memuat jaringan…'}</p>
-          </div>
-          <button type="button" className="modal-close" aria-label="Tutup" onClick={onClose}>×</button>
-        </header>
-
-        {data.isError && <p className="modal-error">{(data.error as Error).message}</p>}
-
-        <div className="dash-cards">
-          <div className="dash-card dash-card-total">
-            <span>Total fitur</span>
-            <strong>{total.toLocaleString('id-ID')}</strong>
-          </div>
-          <div className="dash-card">
-            <span>Panjang pipa</span>
-            <strong>{totalKm.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km</strong>
-            {pipa.map((p) => (
-              <small key={p.fungsi}>
-                {FUNGSI[p.fungsi] ?? p.fungsi}: {p.km.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km ({p.jumlah} ruas)
-              </small>
-            ))}
-          </div>
+          )}
         </div>
+        <div className="dash-auth">
+          <AuthPanel user={me.data ?? null} />
+        </div>
+      </header>
 
+      {data.isError && <p className="modal-error">{(data.error as Error).message}</p>}
+
+      <div className="dash-cards">
+        <div className="dash-card dash-card-total">
+          <span>Total fitur</span>
+          <strong>{total.toLocaleString('id-ID')}</strong>
+        </div>
+        <div className="dash-card">
+          <span>Panjang pipa</span>
+          <strong>{totalKm.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km</strong>
+          {pipa.map((p) => (
+            <small key={p.fungsi}>
+              {FUNGSI[p.fungsi] ?? p.fungsi}: {p.km.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km ({p.jumlah} ruas)
+            </small>
+          ))}
+        </div>
+      </div>
+
+      <section className="dash-block">
         <h3 className="dash-section">Fitur per jenis</h3>
         <ul className="dash-list">
           {fitur.map((f) => (
@@ -75,13 +85,15 @@ export function Dashboard({ networkId, open, onClose, role }: Props) {
             <li className="dash-note">Sambungan rumah hanya terlihat untuk editor dan admin.</li>
           )}
         </ul>
+      </section>
 
-        {data.data?.bisa_melihat_sr && (
-          <>
-            <h3 className="dash-section">Impor terakhir</h3>
-            {data.data.impor_terakhir.length === 0 ? (
-              <p className="dash-note">Belum ada impor.</p>
-            ) : (
+      {data.data?.bisa_melihat_sr && (
+        <section className="dash-block">
+          <h3 className="dash-section">Impor terakhir</h3>
+          {data.data.impor_terakhir.length === 0 ? (
+            <p className="dash-note">Belum ada impor.</p>
+          ) : (
+            <div className="dash-table-wrap">
               <table className="dash-table">
                 <thead>
                   <tr>
@@ -104,10 +116,10 @@ export function Dashboard({ networkId, open, onClose, role }: Props) {
                   ))}
                 </tbody>
               </table>
-            )}
-          </>
-        )}
-      </section>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

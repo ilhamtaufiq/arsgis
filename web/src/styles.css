@@ -448,3 +448,39 @@ body {
   cursor: pointer;
   outline: 0;
 }
+
+/* Halaman dashboard terpisah (/dashboard) */
+.dash-page {
+  min-height: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  display: grid;
+  gap: 18px;
+  background: #EBEBEB;
+}
+.dash-page-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.back {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+}
+.dash-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dash-title h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.dash-title p { margin: 0; font-size: 14px; color: var(--muted); }
+.dash-title select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+}
+.dash-block { display: grid; gap: 8px; background: #fff; border-radius: 20px; padding: 16px 18px; box-shadow: var(--shadow); }
+.dash-table-wrap { overflow-x: auto; }
+.dash-auth { margin-left: auto; }
