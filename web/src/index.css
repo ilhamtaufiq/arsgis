@@ -1,4 +1,8 @@
-/* Tailwind tanpa preflight, supaya gaya peta dan halaman lama tidak berubah. */
+/* Urutan layer ditetapkan di sini karena preflight dimuat belakangan (lazy) di halaman dashboard dan admin.
+   Tanpa ini, layer base akan berada di atas utilities dan mengalahkan kelas seperti p-4. */
+@layer theme, base, components, utilities;
+
+/* Preflight tidak diimpor di sini, supaya gaya peta dan Leaflet tidak berubah. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";

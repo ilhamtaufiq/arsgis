@@ -1,13 +1,16 @@
+import './preflight.css'
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 import { fetchMe, fetchNetworks, type Role } from './api'
 import { AuthPanel } from './Auth'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SiteHeader } from '@/components/site-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -36,51 +39,38 @@ export function AdminPage() {
   const user = me.data ?? null
 
   return (
-    <div className="min-h-full bg-[#EBEBEB] text-foreground">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
-        <header className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" size="sm" asChild className="rounded-full bg-white">
-            <a href="/">
-              <ArrowLeft />
-              Peta
-            </a>
-          </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold tracking-tight">Admin arsgis</h1>
-            <p className="text-sm text-muted-foreground">Kelola pengguna, jaringan, dan impor</p>
-          </div>
-          <Button variant="outline" size="sm" asChild className="rounded-full bg-white">
-            <a href="/dashboard">Dashboard</a>
-          </Button>
-          <AuthPanel user={user} />
-        </header>
-
-        {me.isPending ? null : user?.role !== 'admin' ? (
-          <Card>
-            <CardContent className="py-6 text-sm text-muted-foreground">
-              {user ? 'Halaman ini hanya untuk admin.' : 'Masuk dengan akun admin untuk membuka halaman ini.'}
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="pengguna">
-            <TabsList>
-              <TabsTrigger value="pengguna">Pengguna</TabsTrigger>
-              <TabsTrigger value="jaringan">Jaringan</TabsTrigger>
-              <TabsTrigger value="impor">Impor</TabsTrigger>
-            </TabsList>
-            <TabsContent value="pengguna" className="flex flex-col gap-4">
-              <UsersTab currentUser={user.username} />
-            </TabsContent>
-            <TabsContent value="jaringan" className="flex flex-col gap-4">
-              <NetworksTab />
-            </TabsContent>
-            <TabsContent value="impor" className="flex flex-col gap-4">
-              <ImportsTab />
-            </TabsContent>
-          </Tabs>
-        )}
-      </div>
-    </div>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader title="Admin" actions={<AuthPanel user={user} />} />
+        <main className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+          {me.isPending ? null : user?.role !== 'admin' ? (
+            <Card>
+              <CardContent className="py-6 text-sm text-muted-foreground">
+                {user ? 'Halaman ini hanya untuk admin.' : 'Masuk dengan akun admin untuk membuka halaman ini.'}
+              </CardContent>
+            </Card>
+          ) : (
+            <Tabs defaultValue="pengguna">
+              <TabsList>
+                <TabsTrigger value="pengguna">Pengguna</TabsTrigger>
+                <TabsTrigger value="jaringan">Jaringan</TabsTrigger>
+                <TabsTrigger value="impor">Impor</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pengguna" className="flex flex-col gap-4">
+                <UsersTab currentUser={user.username} />
+              </TabsContent>
+              <TabsContent value="jaringan" className="flex flex-col gap-4">
+                <NetworksTab />
+              </TabsContent>
+              <TabsContent value="impor" className="flex flex-col gap-4">
+                <ImportsTab />
+              </TabsContent>
+            </Tabs>
+          )}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

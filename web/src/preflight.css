@@ -1,0 +1,13 @@
+/* Reset Tailwind + dasar tema shadcn. Hanya dimuat di halaman /dashboard dan /admin (lazy),
+   supaya gaya peta dan Leaflet tidak ikut berubah. */
+@import "tailwindcss/preflight.css" layer(base);
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+  body {
+    font-family: Inter, system-ui, sans-serif;
+  }
+}

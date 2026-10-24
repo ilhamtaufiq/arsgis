@@ -1,3 +1,4 @@
+import './preflight.css'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchMe, fetchNetworks } from './api'
@@ -9,14 +10,16 @@ import { ImportsTable } from '@/components/imports-table'
 import { SectionCards } from '@/components/section-cards'
 import { SiteHeader } from '@/components/site-header'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
-const JENIS_LABEL: Record<string, string> = {
-  pipa: 'Pipa',
-  valve: 'Valve',
-  reservoir: 'Reservoir',
-  sr: 'Sambungan rumah',
-  bronkaptering: 'Bronkaptering',
+// Label dan warna jenis fitur, sama dengan warna di peta.
+const JENIS: Record<string, { label: string; color: string }> = {
+  pipa: { label: 'Pipa', color: '#1d4ed8' },
+  valve: { label: 'Valve', color: '#111111' },
+  reservoir: { label: 'Reservoir', color: '#0f766e' },
+  sr: { label: 'Sambungan rumah', color: '#a16207' },
+  bronkaptering: { label: 'Bronkaptering', color: '#0891b2' },
 }
 
 /** Halaman dashboard jaringan, dibuka di /dashboard. */
@@ -27,9 +30,10 @@ export function DashboardPage() {
   const networkId = chosen ?? networks.data?.[0]?.id ?? null
 
   const data = useQuery({
-    queryKey: ['dashboard', networkId],
+    // Hasilnya bergantung pada peran (sambungan rumah dan impor), jadi peran ikut kunci cache.
+    queryKey: ['dashboard', networkId, me.data?.role ?? 'anon'],
     queryFn: () => fetchDashboard(networkId!),
-    enabled: networkId !== null,
+    enabled: networkId !== null && !me.isPending,
   })
 
   const fitur = data.data?.fitur ?? []
@@ -38,7 +42,11 @@ export function DashboardPage() {
   const totalKm = (data.data?.pipa ?? []).reduce((sum, p) => sum + p.km, 0)
   const bisaSr = data.data?.bisa_melihat_sr ?? false
 
-  const chartData = fitur.map((f) => ({ label: JENIS_LABEL[f.feature_type] ?? f.feature_type, jumlah: f.jumlah }))
+  const chartData = fitur.map((f) => ({
+    label: JENIS[f.feature_type]?.label ?? f.feature_type,
+    jumlah: f.jumlah,
+    color: JENIS[f.feature_type]?.color ?? '#6b7280',
+  }))
 
   const networkSelect =
     networks.data && networks.data.length > 1 ? (
@@ -61,7 +69,7 @@ export function DashboardPage() {
       <AppSidebar />
       <SidebarInset>
         <SiteHeader
-          network={data.data?.jaringan ?? 'memuat…'}
+          title={`Dashboard · ${data.data?.jaringan ?? 'memuat…'}`}
           actions={
             <>
               {networkSelect}
@@ -80,20 +88,25 @@ export function DashboardPage() {
             <div className="lg:col-span-2">
               <FeaturesChart data={chartData} />
             </div>
-            <div className="rounded-xl border bg-card p-4 text-sm">
-              <p className="mb-3 font-medium">Pipa per fungsi</p>
-              <ul className="flex flex-col gap-3">
-                {(data.data?.pipa ?? []).map((p) => (
-                  <li key={p.fungsi} className="flex items-center justify-between">
-                    <span className="capitalize">{p.fungsi}</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {p.km.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km · {p.jumlah} ruas
-                    </span>
-                  </li>
-                ))}
-                {data.data && data.data.pipa.length === 0 && <li className="text-muted-foreground">Belum ada pipa.</li>}
-              </ul>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Pipa per fungsi</CardTitle>
+                <CardDescription>Panjang dan jumlah ruas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="flex flex-col gap-4 text-sm">
+                  {(data.data?.pipa ?? []).map((p) => (
+                    <li key={p.fungsi} className="flex items-center justify-between">
+                      <span className="font-medium capitalize">{p.fungsi}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {p.km.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km · {p.jumlah} ruas
+                      </span>
+                    </li>
+                  ))}
+                  {data.data && data.data.pipa.length === 0 && <li className="text-muted-foreground">Belum ada pipa.</li>}
+                </ul>
+              </CardContent>
+            </Card>
           </div>
 
           {bisaSr && <ImportsTable rows={data.data?.impor_terakhir ?? []} />}
