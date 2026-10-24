@@ -24,11 +24,13 @@ type MapState = {
   /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
   focus: PipeFeature | null
   importOpen: boolean
+  dashboardOpen: boolean
   setNetwork: (id: number) => void
   setBbox: (bbox: Bbox) => void
   select: (feature: PipeFeature | null) => void
   setFocus: (feature: PipeFeature | null) => void
   toggleImport: () => void
+  toggleDashboard: () => void
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -37,9 +39,11 @@ export const useMapStore = create<MapState>((set) => ({
   selected: null,
   focus: null,
   importOpen: false,
+  dashboardOpen: false,
   setNetwork: (id) => set({ networkId: id, selected: null, focus: null }),
   setBbox: (bbox) => set({ bbox }),
   select: (feature) => set({ selected: feature }),
   setFocus: (feature) => set({ focus: feature }),
   toggleImport: () => set((s) => ({ importOpen: !s.importOpen })),
+  toggleDashboard: () => set((s) => ({ dashboardOpen: !s.dashboardOpen })),
 }))

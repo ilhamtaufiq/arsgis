@@ -303,3 +303,85 @@ impl Store {
         Ok(CommitOutcome::Committed(result.rows_affected()))
     }
 }
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FeatureCount {
+    pub feature_type: String,
+    pub jumlah: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PipaLength {
+    pub fungsi: String,
+    pub jumlah: i64,
+    pub km: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ImportSummary {
+    pub id: i64,
+    pub nama_file: String,
+    pub status: String,
+    pub dibuat_oleh: String,
+    pub jumlah_fitur: Option<i64>,
+    pub waktu: String,
+}
+
+impl Store {
+    /// Jumlah fitur aktif per jenis. Sambungan rumah hanya dihitung bila `include_customer` true.
+    pub async fn feature_counts(&self, network_id: i64, include_customer: bool) -> Result<Vec<FeatureCount>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT feature_type, COUNT(*) AS jumlah FROM features \
+             WHERE network_id = $1 AND deleted_at IS NULL AND ($2 OR feature_type <> 'sr') \
+             GROUP BY feature_type ORDER BY feature_type",
+        )
+        .bind(network_id)
+        .bind(include_customer)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| FeatureCount { feature_type: r.get("feature_type"), jumlah: r.get("jumlah") })
+            .collect())
+    }
+
+    /// Jumlah dan panjang geodetik pipa per fungsi. Pipa tanpa fungsi dihitung sebagai distribusi.
+    pub async fn pipa_lengths(&self, network_id: i64) -> Result<Vec<PipaLength>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT COALESCE(fungsi, 'distribusi') AS fungsi, COUNT(*) AS jumlah, \
+                    COALESCE(SUM(ST_Length(geom::geography)), 0)::float8 / 1000.0 AS km \
+             FROM features \
+             WHERE network_id = $1 AND feature_type = 'pipa' AND deleted_at IS NULL \
+             GROUP BY 1 ORDER BY 1",
+        )
+        .bind(network_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| PipaLength { fungsi: r.get("fungsi"), jumlah: r.get("jumlah"), km: r.get("km") })
+            .collect())
+    }
+
+    pub async fn recent_imports(&self, limit: i64) -> Result<Vec<ImportSummary>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, nama_file, status, dibuat_oleh, laporan->>'jumlah_fitur' AS jumlah_fitur, \
+                    to_char(created_at, 'YYYY-MM-DD HH24:MI') AS waktu \
+             FROM import_batches ORDER BY id DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| ImportSummary {
+                id: r.get("id"),
+                nama_file: r.get("nama_file"),
+                status: r.get("status"),
+                dibuat_oleh: r.get("dibuat_oleh"),
+                jumlah_fitur: r.get::<Option<String>, _>("jumlah_fitur").and_then(|s| s.parse().ok()),
+                waktu: r.get("waktu"),
+            })
+            .collect())
+    }
+}

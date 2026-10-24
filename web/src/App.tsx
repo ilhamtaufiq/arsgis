@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
+import { Dashboard } from './Dashboard'
 import { ImportPanel } from './Import'
 import { InfoPanel } from './InfoPanel'
 import { MapView } from './MapView'
@@ -18,6 +19,8 @@ export function App() {
   const setBbox = useMapStore((s) => s.setBbox)
   const select = useMapStore((s) => s.select)
   const toggleImport = useMapStore((s) => s.toggleImport)
+  const dashboardOpen = useMapStore((s) => s.dashboardOpen)
+  const toggleDashboard = useMapStore((s) => s.toggleDashboard)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
@@ -69,15 +72,22 @@ export function App() {
           {customerAllowed && <ImportPanel networkId={networkId} open={importOpen} onClose={toggleImport} />}
         </div>
 
-        {customerAllowed && (
-          <div className="toolbar">
+        <div className="toolbar">
+          <button type="button" className="round" aria-label="Dashboard" aria-pressed={dashboardOpen} onClick={toggleDashboard}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+          {customerAllowed && (
             <button type="button" className="round" aria-label="Impor KML" aria-pressed={importOpen} onClick={toggleImport}>
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                 <path d="M4 20l4-1 11-11-3-3L5 16l-1 4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
               </svg>
             </button>
-          </div>
-        )}
+          )}
+        </div>
+
+        <Dashboard networkId={networkId} open={dashboardOpen} onClose={toggleDashboard} role={user?.role ?? null} />
 
         <div className="notices">
           {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}

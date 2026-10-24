@@ -310,6 +310,32 @@ async fn commit_import(
     }
 }
 
+/// Ringkasan jaringan. Sambungan rumah dan riwayat impor hanya untuk editor dan admin.
+async fn dashboard(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    let customer = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let networks = state.store.list_networks().await?;
+    let nama = networks
+        .iter()
+        .find(|n| n.id == id)
+        .map(|n| n.nama.clone())
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "jaringan tidak ditemukan".into()))?;
+
+    let fitur = state.store.feature_counts(id, customer).await?;
+    let pipa = state.store.pipa_lengths(id).await?;
+    let impor = if customer { state.store.recent_imports(10).await? } else { Vec::new() };
+    Ok(Json(json!({
+        "jaringan": nama,
+        "bisa_melihat_sr": customer,
+        "fitur": fitur,
+        "pipa": pipa,
+        "impor_terakhir": impor,
+    })))
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -325,6 +351,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
             "/api/v1/imports",
             post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),
         )
+        .route("/api/v1/networks/{id}/dashboard", get(dashboard))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
