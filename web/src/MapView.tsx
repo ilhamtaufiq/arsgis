@@ -49,7 +49,8 @@ export function MapView({ features, onBboxChange }: Props) {
 
   useEffect(() => {
     if (!container.current) return
-    const map = L.map(container.current, { center: [-6.82, 107.14], zoom: 13 })
+    const map = L.map(container.current, { center: [-6.82, 107.14], zoom: 13, zoomControl: false })
+    L.control.zoom({ position: 'bottomleft' }).addTo(map)
     leafletLayer({ url: BASEMAP_URL, flavor: 'light', lang: 'id', attribution: BASEMAP_ATTRIBUTION }).addTo(map)
 
     const layer = L.geoJSON(undefined, {

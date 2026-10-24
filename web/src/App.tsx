@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
@@ -8,6 +7,7 @@ import { LayerSwitcher } from './LayerSwitcher'
 import { MapView } from './MapView'
 import { useMapStore } from './store'
 import type { Bbox, FeatureType } from './types'
+import { useMemo } from 'react'
 
 export function App() {
   const networkId = useMapStore((s) => s.networkId)
@@ -55,12 +55,14 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="top">
-        <div>
-          <h1>arsgis</h1>
-          <p>WebGIS perpipaan SPAM · {networks.data?.[0]?.nama ?? 'memuat jaringan…'}</p>
-        </div>
-        <div className="top-controls">
+      <main className="stage">
+        <MapView features={visible} onBboxChange={handleBbox} />
+
+        <div className="float-top">
+          <div className="brand">
+            <strong>arsgis</strong>
+            <span>{networks.data?.[0]?.nama ?? 'memuat jaringan…'}</span>
+          </div>
           <LayerSwitcher
             active={activeLayers}
             pipeFunctions={pipeFunctions}
@@ -68,16 +70,19 @@ export function App() {
             onToggle={toggleLayer}
             onTogglePipe={togglePipeFunction}
           />
+        </div>
+
+        <div className="float-right">
           <AuthPanel user={user} />
           {customerAllowed && <ImportPanel networkId={networkId} />}
         </div>
-      </header>
 
-      <main className="stage">
-        <MapView features={visible} onBboxChange={handleBbox} />
-        {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
-        {features.isError && <div className="banner">{(features.error as Error).message}</div>}
-        {features.isFetching && <div className="status">Memuat fitur…</div>}
+        <div className="notices">
+          {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
+          {features.isError && <div className="banner">{(features.error as Error).message}</div>}
+          {features.isFetching && <div className="status">Memuat fitur…</div>}
+        </div>
+
         <InfoPanel feature={selected} onClose={() => select(null)} />
       </main>
     </div>
