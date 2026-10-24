@@ -10,6 +10,8 @@ export type Network = {
   deskripsi: string | null
 }
 
+export type PipeFunction = 'transmisi' | 'distribusi'
+
 export type FeatureProperties = {
   network_id: number
   feature_type: FeatureType
@@ -19,6 +21,7 @@ export type FeatureProperties = {
   tahun_pasang: number | null
   kondisi: string | null
   status: string
+  fungsi: PipeFunction | null
 }
 
 export type PipeFeature = Feature<Geometry, FeatureProperties> & { id: number }

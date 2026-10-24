@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
@@ -11,10 +12,12 @@ export function App() {
   const networkId = useMapStore((s) => s.networkId)
   const bbox = useMapStore((s) => s.bbox)
   const layers = useMapStore((s) => s.layers)
+  const pipeFunctions = useMapStore((s) => s.pipeFunctions)
   const selected = useMapStore((s) => s.selected)
   const setNetwork = useMapStore((s) => s.setNetwork)
   const setBbox = useMapStore((s) => s.setBbox)
   const toggleLayer = useMapStore((s) => s.toggleLayer)
+  const togglePipeFunction = useMapStore((s) => s.togglePipeFunction)
   const select = useMapStore((s) => s.select)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
@@ -27,7 +30,9 @@ export function App() {
 
   // Sr hanya ikut diminta bila peran mengizinkan, supaya data pelanggan tidak dikirim ke pengunjung.
   const activeLayers: FeatureType[] = layers.filter((t) => customerAllowed || t !== 'sr')
-  const typesKey = [...activeLayers].sort().join(',')
+  // Pipa diminta dari server selama salah satu fungsinya aktif; pemisahan transmisi/distribusi dilakukan di klien.
+  const requested: FeatureType[] = pipeFunctions.length ? ['pipa', ...activeLayers] : activeLayers
+  const typesKey = [...requested].sort().join(',')
 
   const features = useQuery({
     queryKey: ['features', networkId, typesKey, bboxKey(bbox), user?.role ?? 'anon'],
@@ -35,6 +40,15 @@ export function App() {
     enabled: networkId !== null && bbox !== null && typesKey !== '' && !me.isPending,
     placeholderData: (prev) => prev,
   })
+
+  // Fitur pipa tanpa fungsi dianggap distribusi sampai datanya diklasifikasikan.
+  const visible = useMemo(
+    () =>
+      (features.data ?? []).filter(
+        (f) => f.properties.feature_type !== 'pipa' || pipeFunctions.includes(f.properties.fungsi ?? 'distribusi'),
+      ),
+    [features.data, pipeFunctions],
+  )
 
   const handleBbox = (b: Bbox) => setBbox(b)
 
@@ -46,13 +60,19 @@ export function App() {
           <p>WebGIS perpipaan SPAM · {networks.data?.[0]?.nama ?? 'memuat jaringan…'}</p>
         </div>
         <div className="top-controls">
-          <LayerSwitcher active={activeLayers} canSeeCustomerData={customerAllowed} onToggle={toggleLayer} />
+          <LayerSwitcher
+            active={activeLayers}
+            pipeFunctions={pipeFunctions}
+            canSeeCustomerData={customerAllowed}
+            onToggle={toggleLayer}
+            onTogglePipe={togglePipeFunction}
+          />
           <AuthPanel user={user} />
         </div>
       </header>
 
       <main className="stage">
-        <MapView features={features.data ?? []} onBboxChange={handleBbox} />
+        <MapView features={visible} onBboxChange={handleBbox} />
         {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
         {features.isError && <div className="banner">{(features.error as Error).message}</div>}
         {features.isFetching && <div className="status">Memuat fitur…</div>}

@@ -176,6 +176,7 @@ async fn network_geojson(
                     "tahun_pasang": f.tahun_pasang,
                     "kondisi": f.kondisi,
                     "status": f.status,
+                    "fungsi": f.fungsi,
                 },
             })
         })
