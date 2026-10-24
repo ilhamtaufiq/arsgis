@@ -385,3 +385,90 @@ impl Store {
             .collect())
     }
 }
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UserSummary {
+    pub id: i64,
+    pub username: String,
+    pub role: String,
+    pub active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ImportAdminRow {
+    pub id: i64,
+    pub nama_file: String,
+    pub status: String,
+    pub network_id: Option<i64>,
+    pub dibuat_oleh: String,
+    pub jumlah_fitur: Option<i64>,
+    pub waktu: String,
+}
+
+impl Store {
+    pub async fn list_users(&self) -> Result<Vec<UserSummary>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, username, role, active, to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at \
+             FROM users ORDER BY username",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| UserSummary {
+                id: r.get("id"),
+                username: r.get("username"),
+                role: r.get("role"),
+                active: r.get("active"),
+                created_at: r.get("created_at"),
+            })
+            .collect())
+    }
+
+    /// Ubah peran dan/atau status aktif. Field yang None tidak diubah. Mengembalikan false bila pengguna tidak ada.
+    pub async fn update_user(&self, id: i64, role: Option<&str>, active: Option<bool>) -> Result<bool, StoreError> {
+        let result = sqlx::query(
+            "UPDATE users SET role = COALESCE($2, role), active = COALESCE($3, active) WHERE id = $1",
+        )
+        .bind(id)
+        .bind(role)
+        .bind(active)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn create_network(&self, nama: &str, deskripsi: Option<&str>) -> Result<i64, StoreError> {
+        let id: i64 = sqlx::query_scalar("INSERT INTO networks (nama, deskripsi) VALUES ($1, $2) RETURNING id")
+            .bind(nama)
+            .bind(deskripsi)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(id)
+    }
+
+    /// Semua batch impor, termasuk yang belum disimpan, terbaru di atas.
+    pub async fn list_imports(&self, limit: i64) -> Result<Vec<ImportAdminRow>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, nama_file, status, network_id, dibuat_oleh, laporan->>'jumlah_fitur' AS jumlah_fitur, \
+                    to_char(created_at, 'YYYY-MM-DD HH24:MI') AS waktu \
+             FROM import_batches ORDER BY id DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| ImportAdminRow {
+                id: r.get("id"),
+                nama_file: r.get("nama_file"),
+                status: r.get("status"),
+                network_id: r.get("network_id"),
+                dibuat_oleh: r.get("dibuat_oleh"),
+                jumlah_fitur: r.get::<Option<String>, _>("jumlah_fitur").and_then(|s| s.parse().ok()),
+                waktu: r.get("waktu"),
+            })
+            .collect())
+    }
+}

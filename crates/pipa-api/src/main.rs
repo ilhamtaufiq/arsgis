@@ -336,6 +336,127 @@ async fn dashboard(
     })))
 }
 
+/// Pengguna dengan peran admin. Dipakai untuk semua endpoint /api/v1/admin.
+struct Admin(CurrentUser);
+
+impl FromRequestParts<AppState> for Admin {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let user = session_cookie(parts)
+            .and_then(|t| verify_token(t, &state.jwt_secret))
+            .ok_or_else(ApiError::unauthorized)?;
+        if user.role != Role::Admin {
+            return Err(ApiError(StatusCode::FORBIDDEN, "khusus admin".into()));
+        }
+        Ok(Admin(user))
+    }
+}
+
+#[derive(Deserialize)]
+struct NewUserBody {
+    username: String,
+    password: String,
+    role: String,
+}
+
+#[derive(Deserialize)]
+struct UserPatchBody {
+    role: Option<String>,
+    active: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct NewNetworkBody {
+    nama: String,
+    deskripsi: Option<String>,
+}
+
+fn internal(e: impl std::fmt::Display) -> ApiError {
+    tracing::error!(error = %e, "kesalahan internal");
+    ApiError(StatusCode::INTERNAL_SERVER_ERROR, "kesalahan internal".into())
+}
+
+fn bad_request(msg: &str) -> ApiError {
+    ApiError(StatusCode::BAD_REQUEST, msg.into())
+}
+
+async fn admin_list_users(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
+    let users = state.store.list_users().await?;
+    Ok(Json(json!({ "data": users })))
+}
+
+async fn admin_create_user(
+    State(state): State<AppState>,
+    _: Admin,
+    Json(body): Json<NewUserBody>,
+) -> Result<Response, ApiError> {
+    let username = body.username.trim();
+    if username.is_empty() || username.len() > 50 || !username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        return Err(bad_request("username 1–50 karakter: huruf, angka, titik, atau garis bawah"));
+    }
+    if body.password.len() < 10 {
+        return Err(bad_request("password minimal 10 karakter"));
+    }
+    let role = Role::parse(&body.role).map_err(|e| bad_request(&e.to_string()))?;
+    if state.store.list_users().await?.iter().any(|u| u.username == username) {
+        return Err(ApiError(StatusCode::CONFLICT, "username sudah dipakai".into()));
+    }
+    let hash = auth::hash_password(&body.password).map_err(internal)?;
+    let id = state.store.create_user(username, &hash, role.as_str()).await?;
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "username": username, "role": role.as_str() }))).into_response())
+}
+
+async fn admin_update_user(
+    State(state): State<AppState>,
+    Admin(me): Admin,
+    Path(id): Path<i64>,
+    Json(body): Json<UserPatchBody>,
+) -> Result<Json<Value>, ApiError> {
+    let role = body.role.as_deref().map(Role::parse).transpose().map_err(|e| bad_request(&e.to_string()))?;
+    let users = state.store.list_users().await?;
+    let target = users
+        .iter()
+        .find(|u| u.id == id)
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "pengguna tidak ditemukan".into()))?;
+
+    // Admin tidak boleh mengunci dirinya sendiri dari halaman ini.
+    if target.username == me.username {
+        let demoted = role.is_some_and(|r| r != Role::Admin);
+        let deactivated = body.active == Some(false);
+        if demoted || deactivated {
+            return Err(bad_request("tidak bisa menurunkan atau menonaktifkan akun sendiri"));
+        }
+    }
+
+    state.store.update_user(id, role.map(Role::as_str), body.active).await?;
+    Ok(Json(json!({ "id": id, "ok": true })))
+}
+
+async fn admin_list_networks(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
+    let networks = state.store.list_networks().await?;
+    Ok(Json(json!({ "data": networks })))
+}
+
+async fn admin_create_network(
+    State(state): State<AppState>,
+    _: Admin,
+    Json(body): Json<NewNetworkBody>,
+) -> Result<Response, ApiError> {
+    let nama = body.nama.trim();
+    if nama.is_empty() || nama.len() > 120 {
+        return Err(bad_request("nama jaringan 1–120 karakter"));
+    }
+    let deskripsi = body.deskripsi.as_deref().map(str::trim).filter(|d| !d.is_empty());
+    let id = state.store.create_network(nama, deskripsi).await?;
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "nama": nama }))).into_response())
+}
+
+async fn admin_list_imports(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
+    let imports = state.store.list_imports(100).await?;
+    Ok(Json(json!({ "data": imports })))
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -352,6 +473,10 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
             post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),
         )
         .route("/api/v1/networks/{id}/dashboard", get(dashboard))
+        .route("/api/v1/admin/users", get(admin_list_users).post(admin_create_user))
+        .route("/api/v1/admin/users/{id}", axum::routing::patch(admin_update_user))
+        .route("/api/v1/admin/networks", get(admin_list_networks).post(admin_create_network))
+        .route("/api/v1/admin/imports", get(admin_list_imports))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
