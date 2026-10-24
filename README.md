@@ -1,29 +1,67 @@
 # arsgis
 
-WebGIS perpipaan SPAM. Fase 1: viewer read-only (GeoJSON per bbox, layer switcher, info panel).
+WebGIS perpipaan SPAM: GeoJSON per bbox, layer transmisi/distribusi, login dengan peran, dan basemap PMTiles self-hosted.
 
 ## Stack
 
 - Backend: Rust (axum, sqlx), crate `pipa-core`, `pipa-store`, `pipa-api`
-- Frontend: React + TypeScript + Vite, MapLibre GL, TanStack Query, Zustand
-- Database: PostgreSQL + PostGIS (database GIS terpisah dari produksi Arumanis)
+- Frontend: React + TypeScript + Vite, Leaflet, protomaps-leaflet (basemap PMTiles), TanStack Query, Zustand
+- Database: PostgreSQL + PostGIS (database terpisah dari produksi Arumanis)
+
+## Prasyarat
+
+- Rust (stable), Bun, PostgreSQL 16 dengan ekstensi PostGIS
+- `pmtiles` CLI, hanya untuk membuat file basemap (lihat di bawah)
 
 ## Menjalankan lokal
 
 ```bash
-# 1. Database PostGIS (contoh)
-createdb arsgis_dev && psql arsgis_dev -c "CREATE EXTENSION postgis;"
+# 1. Database. Contoh memakai cluster lokal di port 5433 dengan user postgres tanpa password.
+createdb -h 127.0.0.1 -p 5433 -U postgres arsgis_dev
+psql "postgres://postgres@127.0.0.1:5433/arsgis_dev" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-# 2. API (migrasi berjalan saat startup)
-cp .env.example .env
-psql "$DATABASE_URL" -f crates/pipa-store/seed/dev.sql   # data contoh, sekali saja
+# 2. Konfigurasi. API tidak membaca .env sendiri, jadi export variabelnya dulu.
+cp .env.example .env          # isi JWT_SECRET (minimal 32 karakter)
+set -a; . ./.env; set +a
+
+# 3. Jalankan API. Migrasi berjalan saat startup.
 cargo run -p pipa-api
 
-# 3. Frontend (mode pengembangan, proxy ke :8080)
+# 4. Data contoh, sekali saja (setelah API pernah dijalankan supaya tabel sudah ada):
+psql "$DATABASE_URL" -f crates/pipa-store/seed/dev.sql
+
+# 5. Akun untuk login (password minimal 10 karakter, dibaca dari PIPA_PASSWORD atau stdin):
+PIPA_PASSWORD='ganti-dengan-password' cargo run -p pipa-api -- create-user admin_dev admin
+
+# 6. Frontend mode pengembangan (Vite di 5173, meneruskan /api, /healthz, /basemap ke :8080)
 cd web && bun install && bun run dev
 ```
 
-Build produksi: `cd web && bun run build`, lalu API menyajikan `web/dist` (variabel `WEB_DIST`).
+Buka `http://localhost:5173`. Tanpa `cargo run` yang aktif, halaman tidak bisa memuat data.
+
+### Build produksi
+
+```bash
+cd web && bun run build          # menghasilkan web/dist
+cd .. && cargo build --release -p pipa-api
+```
+
+API menyajikan `web/dist` dari variabel `WEB_DIST`, dan basemap dari `BASEMAP_DIR` (default `data`).
+
+## Basemap PMTiles
+
+File basemap tidak di-commit (`data/*.pmtiles` ada di `.gitignore`). Buat file untuk area kerja dengan `pmtiles extract` dari build Protomaps:
+
+```bash
+# CLI: versi yang sudah diuji. Alternatif: unduh binary dari release go-pmtiles.
+GOBIN=$HOME/bin go install github.com/protomaps/go-pmtiles@v1.22.1
+
+mkdir -p data
+$HOME/bin/go-pmtiles extract https://build.protomaps.com/20251201.pmtiles \
+  data/basemap-ciranjang.pmtiles --bbox=107.05,-6.92,107.25,-6.72 --maxzoom=15
+```
+
+Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_URL` di `web/src/MapView.tsx`. Tanpa file ini, peta tetap tampil tetapi tanpa basemap.
 
 ## Endpoint
 
@@ -31,8 +69,35 @@ Build produksi: `cd web && bun run build`, lalu API menyajikan `web/dist` (varia
 | --- | --- | --- |
 | GET | `/healthz` | Health check (ping database) |
 | GET | `/api/v1/networks` | Daftar jaringan |
-| GET | `/api/v1/networks/:id/geojson?bbox=w,s,e,n&types=pipa,valve` | FeatureCollection dalam bbox, maksimal 2° per sisi dan 50.000 fitur |
+| GET | `/api/v1/networks/:id/geojson?bbox=w,s,e,n&types=pipa,valve` | FeatureCollection dalam bbox, maksimal 2° per sisi dan 50.000 fitur. Tanpa `types`, hanya jenis publik yang dikembalikan. |
+| POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
+| POST | `/api/v1/auth/logout` | Hapus cookie sesi |
+| GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |
+| GET | `/basemap/*` | Berkas PMTiles, dengan range request |
+
+## Peran
+
+| Peran | Bisa melihat |
+| --- | --- |
+| Anonim | Pipa, valve, reservoir, bronkaptering |
+| viewer | Sama dengan anonim |
+| editor, admin | Termasuk `sr` (sambungan rumah) |
+
+Fitur `sr` berisi data pelanggan. Endpoint GeoJSON mengembalikan 403 jika peran tidak boleh membaca jenis yang diminta.
+
+## Variabel lingkungan
+
+| Nama | Wajib | Keterangan |
+| --- | --- | --- |
+| `DATABASE_URL` | ya | Koneksi PostgreSQL |
+| `JWT_SECRET` | ya | Minimal 32 karakter. Buat dengan `openssl rand -hex 32`. |
+| `PORT` | tidak | Default 8080 |
+| `WEB_DIST` | tidak | Default `web/dist` |
+| `BASEMAP_DIR` | tidak | Default `data` |
+| `COOKIE_SECURE` | tidak | Set `true` di produksi (HTTPS) |
+| `RUST_LOG` | tidak | Filter log tracing |
 
 ## Catatan keamanan
 
-- Fitur `sr` (sambungan rumah) termasuk data pelanggan. Saat ini **belum ada autentikasi**, jadi endpoint masih terbuka. Jangan deploy ke domain publik sebelum auth dan pemisahan peran selesai.
+- Jangan deploy ke domain publik sebelum `JWT_SECRET` diganti dan `COOKIE_SECURE=true` berjalan di belakang HTTPS.
+- Akun dibuat lewat `create-user`. Tidak ada registrasi publik.
