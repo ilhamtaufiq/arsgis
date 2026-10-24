@@ -7,7 +7,7 @@ import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
 
 // Basemap PMTiles self-hosted (diekstrak dari OSM, disajikan backend di /basemap).
-const BASEMAP_URL = '/basemap/basemap-ciranjang.pmtiles'
+const BASEMAP_URL = '/basemap/basemap-cianjur.pmtiles'
 const BASEMAP_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://protomaps.com">Protomaps</a>'
 

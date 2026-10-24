@@ -57,7 +57,7 @@ GOBIN=$HOME/bin go install github.com/protomaps/go-pmtiles@v1.22.1
 
 mkdir -p data
 $HOME/bin/go-pmtiles extract https://build.protomaps.com/20251201.pmtiles \
-  data/basemap-ciranjang.pmtiles --bbox=107.05,-6.92,107.25,-6.72 --maxzoom=15
+  data/basemap-cianjur.pmtiles --bbox=106.77,-7.40,107.75,-6.65 --maxzoom=15
 ```
 
 Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_URL` di `web/src/MapView.tsx`. Tanpa file ini, peta tetap tampil tetapi tanpa basemap.
