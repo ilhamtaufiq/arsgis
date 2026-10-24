@@ -62,7 +62,20 @@ export function App() {
         <div className="float-top">
           <div className="brand">
             <strong>arsgis</strong>
-            <span>{networks.data?.[0]?.nama ?? 'memuat jaringan…'}</span>
+            {networks.data && networks.data.length > 1 ? (
+              <select
+                className="network-select"
+                aria-label="Pilih jaringan"
+                value={networkId ?? ''}
+                onChange={(e) => setNetwork(Number(e.target.value))}
+              >
+                {networks.data.map((n) => (
+                  <option key={n.id} value={n.id}>{n.nama}</option>
+                ))}
+              </select>
+            ) : (
+              <span>{networks.data?.[0]?.nama ?? 'memuat jaringan…'}</span>
+            )}
           </div>
           <SearchBox features={visible} />
         </div>
