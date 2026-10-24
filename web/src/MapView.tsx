@@ -43,7 +43,9 @@ function pointStyle(type: string): L.CircleMarkerOptions {
 
 export function MapView({ features, onBboxChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.GeoJSON | null>(null)
+  const focus = useMapStore((s) => s.focus)
   const onBboxChangeRef = useRef(onBboxChange)
   onBboxChangeRef.current = onBboxChange
 
@@ -77,12 +79,21 @@ export function MapView({ features, onBboxChange }: Props) {
     map.on('moveend', () => onBboxChangeRef.current(toBbox(map)))
     onBboxChangeRef.current(toBbox(map))
 
+    mapRef.current = map
     layerRef.current = layer
     return () => {
       map.remove()
+      mapRef.current = null
       layerRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !focus) return
+    // Titik tunggal menghasilkan batas nol, jadi dibatasi zoom maksimum agar tidak terlalu dekat.
+    map.fitBounds(L.geoJSON(focus).getBounds(), { maxZoom: 17, padding: [60, 60] })
+  }, [focus])
 
   useEffect(() => {
     const layer = layerRef.current

@@ -19,12 +19,13 @@ const LABEL: Record<string, string> = {
 
 type Props = {
   networkId: number | null
+  open: boolean
+  onClose: () => void
 }
 
 /** Impor KML untuk editor dan admin: unggah, periksa laporan, lalu simpan ke jaringan. */
-export function ImportPanel({ networkId }: Props) {
+export function ImportPanel({ networkId, open, onClose }: Props) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [titik, setTitik] = useState('sr')
   const [staged, setStaged] = useState<StagedImport | null>(null)
@@ -62,13 +63,7 @@ export function ImportPanel({ networkId }: Props) {
     }
   }
 
-  if (!open) {
-    return (
-      <div className="auth">
-        <button type="button" onClick={() => setOpen(true)}>Impor KML</button>
-      </div>
-    )
-  }
+  if (!open) return null
 
   return (
     <div className="import">
@@ -82,7 +77,7 @@ export function ImportPanel({ networkId }: Props) {
         <button type="button" onClick={handleUpload} disabled={!file || busy}>
           {busy && !staged ? 'Memeriksa…' : 'Unggah & periksa'}
         </button>
-        <button type="button" onClick={() => { setOpen(false); setStaged(null); setMessage(null) }}>Tutup</button>
+        <button type="button" onClick={() => { onClose(); setStaged(null); setMessage(null) }}>Tutup</button>
       </div>
 
       {staged && (

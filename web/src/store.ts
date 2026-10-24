@@ -13,35 +13,33 @@ export const PIPE_LABELS: Record<PipeFunction, string> = {
   distribusi: 'Pipa distribusi',
 }
 
-// Sambungan rumah (sr) dinonaktifkan secara default: data pelanggan belum punya auth.
-export const DEFAULT_LAYERS: FeatureType[] = ['valve', 'reservoir', 'bronkaptering']
+// Semua layer aktif. Sambungan rumah (sr) hanya ikut diminta untuk editor dan admin (lihat App).
+export const DEFAULT_LAYERS: FeatureType[] = ['valve', 'reservoir', 'bronkaptering', 'sr']
 export const DEFAULT_PIPE_FUNCTIONS: PipeFunction[] = ['transmisi', 'distribusi']
 
 type MapState = {
   networkId: number | null
   bbox: Bbox | null
-  layers: FeatureType[]
-  pipeFunctions: PipeFunction[]
   selected: PipeFeature | null
+  /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
+  focus: PipeFeature | null
+  importOpen: boolean
   setNetwork: (id: number) => void
   setBbox: (bbox: Bbox) => void
-  toggleLayer: (type: FeatureType) => void
-  togglePipeFunction: (fungsi: PipeFunction) => void
   select: (feature: PipeFeature | null) => void
+  setFocus: (feature: PipeFeature | null) => void
+  toggleImport: () => void
 }
-
-const toggle = <T,>(list: T[], item: T): T[] =>
-  list.includes(item) ? list.filter((x) => x !== item) : [...list, item]
 
 export const useMapStore = create<MapState>((set) => ({
   networkId: null,
   bbox: null,
-  layers: DEFAULT_LAYERS,
-  pipeFunctions: DEFAULT_PIPE_FUNCTIONS,
   selected: null,
-  setNetwork: (id) => set({ networkId: id, selected: null }),
+  focus: null,
+  importOpen: false,
+  setNetwork: (id) => set({ networkId: id, selected: null, focus: null }),
   setBbox: (bbox) => set({ bbox }),
-  toggleLayer: (type) => set((s) => ({ layers: toggle(s.layers, type) })),
-  togglePipeFunction: (fungsi) => set((s) => ({ pipeFunctions: toggle(s.pipeFunctions, fungsi) })),
   select: (feature) => set({ selected: feature }),
+  setFocus: (feature) => set({ focus: feature }),
+  toggleImport: () => set((s) => ({ importOpen: !s.importOpen })),
 }))

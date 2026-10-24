@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { login, logout, type User } from './api'
 
@@ -6,7 +6,7 @@ type Props = {
   user: User | null
 }
 
-/** Tombol masuk, atau nama dan peran pengguna dengan tombol keluar. */
+/** Tombol masuk, atau nama dan peran pengguna dengan tombol keluar. Form login tampil sebagai modal. */
 export function AuthPanel({ user }: Props) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -14,9 +14,25 @@ export function AuthPanel({ user }: Props) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const usernameRef = useRef<HTMLInputElement>(null)
 
   // Setelah masuk atau keluar, data peta dan sesi dimuat ulang karena hasilnya bergantung pada peran.
   const refresh = () => Promise.all([queryClient.invalidateQueries({ queryKey: ['me'] }), queryClient.invalidateQueries({ queryKey: ['features'] })])
+
+  function close() {
+    setOpen(false)
+    setError(null)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    usernameRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -50,36 +66,57 @@ export function AuthPanel({ user }: Props) {
     )
   }
 
-  if (!open) {
-    return (
-      <div className="auth">
-        <button type="button" onClick={() => setOpen(true)}>Masuk</button>
-      </div>
-    )
-  }
-
   return (
-    <form className="auth auth-form" onSubmit={handleSubmit}>
-      <input
-        aria-label="Username"
-        placeholder="Username"
-        autoComplete="username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        required
-      />
-      <input
-        aria-label="Password"
-        type="password"
-        placeholder="Password"
-        autoComplete="current-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-      />
-      <button type="submit" disabled={busy}>{busy ? 'Memproses…' : 'Masuk'}</button>
-      <button type="button" onClick={() => { setOpen(false); setError(null) }}>Batal</button>
-      {error && <p className="auth-error" role="alert">{error}</p>}
-    </form>
+    <>
+      <div className="auth">
+        <button type="button" className="auth-primary" onClick={() => setOpen(true)}>Masuk</button>
+      </div>
+
+      {open && (
+        <div className="modal-backdrop" onMouseDown={close}>
+          <form
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-title"
+            onMouseDown={(e) => e.stopPropagation()}
+            onSubmit={handleSubmit}
+          >
+            <div className="modal-head">
+              <h2 id="login-title">Masuk ke arsgis</h2>
+              <button type="button" className="modal-close" aria-label="Tutup" onClick={close}>×</button>
+            </div>
+            <p className="modal-sub">Data sambungan rumah hanya untuk editor dan admin.</p>
+
+            <label className="field">
+              <span>Username</span>
+              <input
+                ref={usernameRef}
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </label>
+
+            {error && <p className="modal-error" role="alert">{error}</p>}
+
+            <button type="submit" className="modal-submit" disabled={busy}>
+              {busy ? 'Memproses…' : 'Masuk'}
+            </button>
+          </form>
+        </div>
+      )}
+    </>
   )
 }

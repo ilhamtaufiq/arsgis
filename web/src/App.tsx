@@ -1,25 +1,23 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
 import { ImportPanel } from './Import'
 import { InfoPanel } from './InfoPanel'
-import { LayerSwitcher } from './LayerSwitcher'
 import { MapView } from './MapView'
-import { useMapStore } from './store'
+import { SearchBox } from './Search'
+import { DEFAULT_LAYERS, DEFAULT_PIPE_FUNCTIONS, useMapStore } from './store'
 import type { Bbox, FeatureType } from './types'
-import { useMemo } from 'react'
 
 export function App() {
   const networkId = useMapStore((s) => s.networkId)
   const bbox = useMapStore((s) => s.bbox)
-  const layers = useMapStore((s) => s.layers)
-  const pipeFunctions = useMapStore((s) => s.pipeFunctions)
   const selected = useMapStore((s) => s.selected)
+  const importOpen = useMapStore((s) => s.importOpen)
   const setNetwork = useMapStore((s) => s.setNetwork)
   const setBbox = useMapStore((s) => s.setBbox)
-  const toggleLayer = useMapStore((s) => s.toggleLayer)
-  const togglePipeFunction = useMapStore((s) => s.togglePipeFunction)
   const select = useMapStore((s) => s.select)
+  const toggleImport = useMapStore((s) => s.toggleImport)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
@@ -30,15 +28,15 @@ export function App() {
   if (networkId === null && firstNetwork !== undefined) setNetwork(firstNetwork)
 
   // Sr hanya ikut diminta bila peran mengizinkan, supaya data pelanggan tidak dikirim ke pengunjung.
-  const activeLayers: FeatureType[] = layers.filter((t) => customerAllowed || t !== 'sr')
-  // Pipa diminta dari server selama salah satu fungsinya aktif; pemisahan transmisi/distribusi dilakukan di klien.
-  const requested: FeatureType[] = pipeFunctions.length ? ['pipa', ...activeLayers] : activeLayers
+  const activeLayers: FeatureType[] = DEFAULT_LAYERS.filter((t) => customerAllowed || t !== 'sr')
+  const pipeFunctions = DEFAULT_PIPE_FUNCTIONS
+  const requested: FeatureType[] = ['pipa', ...activeLayers]
   const typesKey = [...requested].sort().join(',')
 
   const features = useQuery({
     queryKey: ['features', networkId, typesKey, bboxKey(bbox), user?.role ?? 'anon'],
-    queryFn: ({ signal }) => fetchFeatures(networkId!, bbox!, typesKey ? typesKey.split(',') : [], signal),
-    enabled: networkId !== null && bbox !== null && typesKey !== '' && !me.isPending,
+    queryFn: ({ signal }) => fetchFeatures(networkId!, bbox!, typesKey.split(','), signal),
+    enabled: networkId !== null && bbox !== null && !me.isPending,
     placeholderData: (prev) => prev,
   })
 
@@ -63,19 +61,23 @@ export function App() {
             <strong>arsgis</strong>
             <span>{networks.data?.[0]?.nama ?? 'memuat jaringan…'}</span>
           </div>
-          <LayerSwitcher
-            active={activeLayers}
-            pipeFunctions={pipeFunctions}
-            canSeeCustomerData={customerAllowed}
-            onToggle={toggleLayer}
-            onTogglePipe={togglePipeFunction}
-          />
+          <SearchBox features={visible} />
         </div>
 
         <div className="float-right">
           <AuthPanel user={user} />
-          {customerAllowed && <ImportPanel networkId={networkId} />}
+          {customerAllowed && <ImportPanel networkId={networkId} open={importOpen} onClose={toggleImport} />}
         </div>
+
+        {customerAllowed && (
+          <div className="toolbar">
+            <button type="button" className="round" aria-label="Impor KML" aria-pressed={importOpen} onClick={toggleImport}>
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path d="M4 20l4-1 11-11-3-3L5 16l-1 4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         <div className="notices">
           {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
