@@ -5,3 +5,6 @@ web/dist/
 
 # Basemap PMTiles hasil ekstrak (lihat README)
 data/*.pmtiles
+
+# Artefak build TypeScript
+*.tsbuildinfo
