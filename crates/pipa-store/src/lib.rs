@@ -191,3 +191,115 @@ impl Store {
         Ok(id)
     }
 }
+
+/// Satu baris staging yang siap ditulis. Geometri dalam bentuk teks GeoJSON.
+#[derive(Debug, Clone)]
+pub struct StagingRow {
+    pub feature_type: String,
+    pub nama: Option<String>,
+    pub diameter_mm: Option<i32>,
+    pub geometry: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchRow {
+    pub id: i64,
+    pub nama_file: String,
+    pub status: String,
+    pub network_id: Option<i64>,
+    pub laporan: serde_json::Value,
+    pub dibuat_oleh: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CommitOutcome {
+    Committed(u64),
+    NotFound,
+    AlreadyCommitted,
+}
+
+impl Store {
+    pub async fn create_batch(
+        &self,
+        nama_file: &str,
+        laporan: &serde_json::Value,
+        dibuat_oleh: &str,
+        rows: &[StagingRow],
+    ) -> Result<i64, StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh) VALUES ($1, $2, $3) RETURNING id",
+        )
+        .bind(nama_file)
+        .bind(laporan)
+        .bind(dibuat_oleh)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        for row in rows {
+            sqlx::query(
+                "INSERT INTO import_staging (batch_id, feature_type, nama, diameter_mm, geom) \
+                 VALUES ($1, $2, $3, $4, ST_SetSRID(ST_GeomFromGeoJSON($5), 4326))",
+            )
+            .bind(id)
+            .bind(&row.feature_type)
+            .bind(&row.nama)
+            .bind(row.diameter_mm)
+            .bind(&row.geometry)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    pub async fn get_batch(&self, id: i64) -> Result<Option<BatchRow>, StoreError> {
+        let row = sqlx::query(
+            "SELECT id, nama_file, status, network_id, laporan, dibuat_oleh FROM import_batches WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| BatchRow {
+            id: r.get("id"),
+            nama_file: r.get("nama_file"),
+            status: r.get("status"),
+            network_id: r.get("network_id"),
+            laporan: r.get("laporan"),
+            dibuat_oleh: r.get("dibuat_oleh"),
+        }))
+    }
+
+    /// Memindahkan staging batch ke `features`. Batch yang sudah di-commit tidak bisa diulang.
+    pub async fn commit_batch(&self, id: i64, network_id: i64) -> Result<CommitOutcome, StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let status: Option<String> =
+            sqlx::query_scalar("SELECT status FROM import_batches WHERE id = $1 FOR UPDATE")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        match status.as_deref() {
+            None => return Ok(CommitOutcome::NotFound),
+            Some("committed") => return Ok(CommitOutcome::AlreadyCommitted),
+            Some(_) => {}
+        }
+
+        let result = sqlx::query(
+            "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, import_batch_id) \
+             SELECT $2, feature_type, geom, nama, diameter_mm, batch_id \
+             FROM import_staging WHERE batch_id = $1",
+        )
+        .bind(id)
+        .bind(network_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query("UPDATE import_batches SET status = 'committed', network_id = $2 WHERE id = $1")
+            .bind(id)
+            .bind(network_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(CommitOutcome::Committed(result.rows_affected()))
+    }
+}

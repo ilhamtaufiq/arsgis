@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
+import { ImportPanel } from './Import'
 import { InfoPanel } from './InfoPanel'
 import { LayerSwitcher } from './LayerSwitcher'
 import { MapView } from './MapView'
@@ -68,6 +69,7 @@ export function App() {
             onTogglePipe={togglePipeFunction}
           />
           <AuthPanel user={user} />
+          {customerAllowed && <ImportPanel networkId={networkId} />}
         </div>
       </header>
 

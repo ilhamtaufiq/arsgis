@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 pipa-core = { workspace = true }
 pipa-store = { workspace = true }
+pipa-import = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

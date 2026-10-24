@@ -10,20 +10,26 @@ use std::{
     path::PathBuf,
 };
 
+use std::collections::BTreeMap;
+
 use axum::{
-    extract::{FromRequestParts, Path, Query, State},
+    body::Bytes,
+    extract::{DefaultBodyLimit, FromRequestParts, Path, Query, State},
     http::{header, request::Parts, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use pipa_core::{can_read_types, parse_types, Bbox, CoreError, FeatureType, Role};
-use pipa_store::{Store, StoreError};
+use pipa_store::{CommitOutcome, Store, StoreError, StagingRow};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
 
 use crate::auth::{clear_cookie_value, session_cookie, set_cookie_value, verify_token, CurrentUser};
+
+/// Batas ukuran berkas impor. KML dengan gambar tertanam bisa besar.
+const MAX_IMPORT_BYTES: usize = 20 * 1024 * 1024;
 
 #[derive(Clone)]
 struct AppState {
@@ -193,6 +199,117 @@ async fn network_geojson(
     Ok(response)
 }
 
+/// Pengguna yang boleh mengimpor data: editor dan admin.
+struct Editor(CurrentUser);
+
+impl FromRequestParts<AppState> for Editor {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let user = session_cookie(parts)
+            .and_then(|t| verify_token(t, &state.jwt_secret))
+            .ok_or_else(ApiError::unauthorized)?;
+        if user.role < Role::Editor {
+            return Err(ApiError(StatusCode::FORBIDDEN, "impor butuh peran editor atau admin".into()));
+        }
+        Ok(Editor(user))
+    }
+}
+
+#[derive(Deserialize)]
+struct UploadParams {
+    nama_file: Option<String>,
+    /// Jenis untuk Point yang namanya tidak menyebut jenis, misalnya `sr`.
+    titik: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CommitParams {
+    network_id: i64,
+}
+
+async fn upload_import(
+    State(state): State<AppState>,
+    Editor(user): Editor,
+    Query(params): Query<UploadParams>,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "berkas kosong".into()));
+    }
+    let xml = std::str::from_utf8(&body)
+        .map_err(|_| ApiError(StatusCode::BAD_REQUEST, "berkas bukan teks UTF-8".into()))?;
+    let titik = params.titik.as_deref().map(FeatureType::parse).transpose()?;
+    let preview = pipa_import::parse_kml(xml, titik).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let mut per_jenis: BTreeMap<&str, usize> = BTreeMap::new();
+    for f in &preview.features {
+        *per_jenis.entry(f.feature_type.as_str()).or_default() += 1;
+    }
+    let dilewati: Vec<Value> = preview
+        .skipped
+        .iter()
+        .map(|s| json!({ "nama": s.nama, "alasan": s.alasan }))
+        .collect();
+    let laporan = json!({
+        "jumlah_fitur": preview.features.len(),
+        "per_jenis": per_jenis,
+        "dilewati": dilewati,
+        "bukan_fitur": preview.bukan_fitur,
+    });
+    if preview.features.is_empty() {
+        return Ok((StatusCode::UNPROCESSABLE_ENTITY, Json(json!({ "error": "tidak ada fitur yang bisa diimpor", "laporan": laporan }))).into_response());
+    }
+
+    let rows: Vec<StagingRow> = preview
+        .features
+        .iter()
+        .map(|f| StagingRow {
+            feature_type: f.feature_type.as_str().to_string(),
+            nama: f.nama.clone(),
+            diameter_mm: f.diameter_mm,
+            geometry: f.geometry.to_string(),
+        })
+        .collect();
+    let nama_file = params.nama_file.unwrap_or_else(|| "impor.kml".into());
+    let id = state.store.create_batch(&nama_file, &laporan, &user.username, &rows).await?;
+
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "status": "staged", "nama_file": nama_file, "laporan": laporan }))).into_response())
+}
+
+async fn get_import(State(state): State<AppState>, _: Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
+    let batch = state
+        .store
+        .get_batch(id)
+        .await?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into()))?;
+    Ok(Json(json!({
+        "id": batch.id,
+        "nama_file": batch.nama_file,
+        "status": batch.status,
+        "network_id": batch.network_id,
+        "dibuat_oleh": batch.dibuat_oleh,
+        "laporan": batch.laporan,
+    })))
+}
+
+async fn commit_import(
+    State(state): State<AppState>,
+    _: Editor,
+    Path(id): Path<i64>,
+    Query(params): Query<CommitParams>,
+) -> Result<Json<Value>, ApiError> {
+    let networks = state.store.list_networks().await?;
+    if !networks.iter().any(|n| n.id == params.network_id) {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "jaringan tidak ditemukan".into()));
+    }
+    match state.store.commit_batch(id, params.network_id).await? {
+        CommitOutcome::Committed(n) => Ok(Json(json!({ "id": id, "status": "committed", "fitur_ditulis": n }))),
+        CommitOutcome::NotFound => Err(ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into())),
+        CommitOutcome::AlreadyCommitted => Err(ApiError(StatusCode::CONFLICT, "batch sudah di-commit".into())),
+    }
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -204,6 +321,12 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/auth/me", get(me))
         .route("/api/v1/networks", get(list_networks))
         .route("/api/v1/networks/{id}/geojson", get(network_geojson))
+        .route(
+            "/api/v1/imports",
+            post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),
+        )
+        .route("/api/v1/imports/{id}", get(get_import))
+        .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
         .nest_service("/basemap", ServeDir::new(basemap_dir))
         .fallback_service(spa)

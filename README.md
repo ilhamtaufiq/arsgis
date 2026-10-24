@@ -71,6 +71,9 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | GET | `/api/v1/networks/:id/geojson?bbox=w,s,e,n&types=pipa,valve` | FeatureCollection dalam bbox, maksimal 2° per sisi dan 50.000 fitur. Tanpa `types`, hanya jenis publik yang dikembalikan. |
 | POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
 | POST | `/api/v1/auth/logout` | Hapus cookie sesi |
+| POST | `/api/v1/imports?nama_file=...&titik=sr` | Unggah KML ke staging dan dapatkan laporan (editor, admin) |
+| GET | `/api/v1/imports/:id` | Laporan dan status batch impor (editor, admin) |
+| POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan batch ke jaringan; sekali saja per batch (editor, admin) |
 | GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |
 | GET | `/basemap/*` | Berkas PMTiles, dengan range request |
 

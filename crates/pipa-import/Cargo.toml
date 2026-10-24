@@ -1,0 +1,12 @@
+[package]
+name = "pipa-import"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pipa-core = { workspace = true }
+quick-xml = "0.37"
+serde_json = { workspace = true }
+thiserror = { workspace = true }
