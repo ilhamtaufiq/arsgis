@@ -20,9 +20,8 @@ WebGIS perpipaan SPAM: GeoJSON per bbox, layer transmisi/distribusi, login denga
 createdb -h 127.0.0.1 -p 5433 -U postgres arsgis_dev
 psql "postgres://postgres@127.0.0.1:5433/arsgis_dev" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-# 2. Konfigurasi. API tidak membaca .env sendiri, jadi export variabelnya dulu.
-cp .env.example .env          # isi JWT_SECRET (minimal 32 karakter)
-set -a; . ./.env; set +a
+# 2. Konfigurasi. API membaca `.env` dari folder proyek. Variabel di shell tetap menang jika di-set.
+cp .env.example .env          # isi DATABASE_URL dan JWT_SECRET (minimal 32 karakter)
 
 # 3. Jalankan API. Migrasi berjalan saat startup.
 cargo run -p pipa-api

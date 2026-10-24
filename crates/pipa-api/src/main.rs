@@ -249,6 +249,8 @@ async fn create_user(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Memuat `.env` dari folder kerja. Variabel yang sudah di-set di shell tidak ditimpa.
+    dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
