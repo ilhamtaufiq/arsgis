@@ -472,3 +472,346 @@ impl Store {
             .collect())
     }
 }
+
+// ---------------------------------------------------------------------------
+// Referensi SPM air minum (hasil sinkron Arumanis dan batas desa)
+// ---------------------------------------------------------------------------
+
+/// Satu poligon batas desa. `geometry` dalam teks GeoJSON (Polygon atau MultiPolygon).
+#[derive(Debug, Clone)]
+pub struct BatasInput {
+    pub kode_bps: String,
+    pub kecamatan: String,
+    pub desa: String,
+    pub geometry: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DesaRefInput {
+    pub id: i64,
+    pub nama: String,
+    pub kecamatan: String,
+    pub target_kk: i64,
+    pub jp_kk: i64,
+    pub bjp_master: i64,
+    pub bjp_unit: i64,
+    pub sr: i64,
+    pub jiwa: i64,
+    pub unit_count: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnitRefInput {
+    pub id: i64,
+    pub desa_id: i64,
+    pub nama: Option<String>,
+    pub sistem_layanan: Option<String>,
+    pub sumber_dana: Option<String>,
+    pub is_simspam: bool,
+    pub sr: i64,
+    pub kk: i64,
+    pub jiwa: i64,
+    pub bjp_kk: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PokmasRefInput {
+    pub desa_id: i64,
+    pub nama: Option<String>,
+    pub perdes: Option<String>,
+    pub kepala: Option<String>,
+    pub bendahara: Option<String>,
+    pub sekretaris: Option<String>,
+    pub konflik: bool,
+    pub sumber_unit_ids: Vec<i64>,
+}
+
+/// Hasil penerapan sinkron.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct ApplyResult {
+    pub jumlah_desa: i64,
+    pub jumlah_unit: i64,
+    pub jumlah_pokmas: i64,
+    /// Unit yang desanya tidak ada di daftar desa Arumanis, sehingga dilewati.
+    pub unit_dilewati: i64,
+    pub desa_tanpa_batas: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DesaSummary {
+    pub id: i64,
+    pub nama: String,
+    pub kecamatan: String,
+    pub kode_bps: Option<String>,
+    pub punya_batas: bool,
+    pub target_kk: i64,
+    pub jp_kk: i64,
+    pub bjp_kk: i64,
+    pub sr: i64,
+    pub jiwa: i64,
+    pub unit_count: i64,
+    /// (JP + BJP) / target × 100. Null bila target 0.
+    pub cakupan_persen: Option<f64>,
+    pub punya_pokmas: bool,
+    pub pokmas_konflik: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SyncRunRow {
+    pub id: i64,
+    pub dipicu_oleh: String,
+    pub mulai_at: String,
+    pub selesai_at: Option<String>,
+    pub status: String,
+    pub jumlah_desa: Option<i32>,
+    pub jumlah_unit: Option<i32>,
+    pub jumlah_pokmas: Option<i32>,
+    pub desa_tanpa_batas: Option<i32>,
+    pub pesan: Option<String>,
+}
+
+/// Cocokkan desa ke poligon: koreksi manual dulu, lalu nama kecamatan + desa yang dinormalisasi.
+const MATCH_DESA_SQL: &str = "\
+UPDATE ref_desa d SET kode_bps = m.kode FROM (
+    SELECT d2.id,
+           CASE WHEN o.desa_id IS NOT NULL
+                THEN (SELECT b2.kode_bps FROM ref_batas_desa b2 WHERE b2.kode_bps = o.kode_bps)
+                ELSE (SELECT b.kode_bps FROM ref_batas_desa b
+                      WHERE norm_wilayah(b.kecamatan) = norm_wilayah(d2.kecamatan)
+                        AND norm_wilayah(b.desa) = norm_wilayah(d2.nama)
+                      ORDER BY b.kode_bps LIMIT 1)
+           END AS kode
+    FROM ref_desa d2
+    LEFT JOIN ref_desa_kode_override o ON o.desa_id = d2.id
+) m
+WHERE m.id = d.id AND d.kode_bps IS DISTINCT FROM m.kode";
+
+async fn count_desa_tanpa_batas(conn: &mut sqlx::PgConnection) -> Result<i64, StoreError> {
+    Ok(sqlx::query_scalar("SELECT COUNT(*) FROM ref_desa WHERE aktif AND kode_bps IS NULL")
+        .fetch_one(conn)
+        .await?)
+}
+
+impl Store {
+    /// Ganti seluruh batas desa, lalu cocokkan ulang desa ke poligon. Mengembalikan (jumlah poligon, desa tanpa batas).
+    pub async fn replace_batas_desa(&self, rows: &[BatasInput], sumber: &str) -> Result<(i64, i64), StoreError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM ref_batas_desa").execute(&mut *tx).await?;
+        for r in rows {
+            sqlx::query(
+                "INSERT INTO ref_batas_desa (kode_bps, kecamatan, desa, geom, sumber) \
+                 VALUES ($1, $2, $3, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($4), 4326)), $5)",
+            )
+            .bind(&r.kode_bps)
+            .bind(&r.kecamatan)
+            .bind(&r.desa)
+            .bind(&r.geometry)
+            .bind(sumber)
+            .execute(&mut *tx)
+            .await?;
+        }
+        sqlx::query(MATCH_DESA_SQL).execute(&mut *tx).await?;
+        let tanpa = count_desa_tanpa_batas(&mut tx).await?;
+        tx.commit().await?;
+        Ok((rows.len() as i64, tanpa))
+    }
+
+    /// Terapkan hasil sinkron dalam satu transaksi. `units` None berarti unit dan Pokmas tidak disentuh
+    /// (misalnya token Arumanis belum diatur). Baris yang tidak lagi ada di Arumanis ditandai tidak aktif.
+    pub async fn apply_sync(
+        &self,
+        desa: &[DesaRefInput],
+        units: Option<(&[UnitRefInput], &[PokmasRefInput])>,
+    ) -> Result<ApplyResult, StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let mut result = ApplyResult::default();
+
+        sqlx::query("UPDATE ref_desa SET aktif = false").execute(&mut *tx).await?;
+        for d in desa {
+            sqlx::query(
+                "INSERT INTO ref_desa (id, nama, kecamatan, target_kk, jp_kk, bjp_master, bjp_unit, sr, jiwa, unit_count, aktif, synced_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, now()) \
+                 ON CONFLICT (id) DO UPDATE SET nama = EXCLUDED.nama, kecamatan = EXCLUDED.kecamatan, \
+                   target_kk = EXCLUDED.target_kk, jp_kk = EXCLUDED.jp_kk, bjp_master = EXCLUDED.bjp_master, \
+                   bjp_unit = EXCLUDED.bjp_unit, sr = EXCLUDED.sr, jiwa = EXCLUDED.jiwa, \
+                   unit_count = EXCLUDED.unit_count, aktif = true, synced_at = now()",
+            )
+            .bind(d.id)
+            .bind(&d.nama)
+            .bind(&d.kecamatan)
+            .bind(d.target_kk as i32)
+            .bind(d.jp_kk as i32)
+            .bind(d.bjp_master as i32)
+            .bind(d.bjp_unit as i32)
+            .bind(d.sr as i32)
+            .bind(d.jiwa as i32)
+            .bind(d.unit_count as i32)
+            .execute(&mut *tx)
+            .await?;
+        }
+        result.jumlah_desa = desa.len() as i64;
+
+        if let Some((units, pokmas)) = units {
+            let known: std::collections::HashSet<i64> = desa.iter().map(|d| d.id).collect();
+            sqlx::query("UPDATE ref_unit_spam SET aktif = false").execute(&mut *tx).await?;
+            for u in units {
+                if !known.contains(&u.desa_id) {
+                    result.unit_dilewati += 1;
+                    continue;
+                }
+                sqlx::query(
+                    "INSERT INTO ref_unit_spam (id, desa_id, nama, sistem_layanan, sumber_dana, is_simspam, sr, kk, jiwa, bjp_kk, aktif, synced_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, now()) \
+                     ON CONFLICT (id) DO UPDATE SET desa_id = EXCLUDED.desa_id, nama = EXCLUDED.nama, \
+                       sistem_layanan = EXCLUDED.sistem_layanan, sumber_dana = EXCLUDED.sumber_dana, \
+                       is_simspam = EXCLUDED.is_simspam, sr = EXCLUDED.sr, kk = EXCLUDED.kk, jiwa = EXCLUDED.jiwa, \
+                       bjp_kk = EXCLUDED.bjp_kk, aktif = true, synced_at = now()",
+                )
+                .bind(u.id)
+                .bind(u.desa_id)
+                .bind(&u.nama)
+                .bind(&u.sistem_layanan)
+                .bind(&u.sumber_dana)
+                .bind(u.is_simspam)
+                .bind(u.sr as i32)
+                .bind(u.kk as i32)
+                .bind(u.jiwa as i32)
+                .bind(u.bjp_kk as i32)
+                .execute(&mut *tx)
+                .await?;
+                result.jumlah_unit += 1;
+            }
+
+            sqlx::query("DELETE FROM ref_pokmas").execute(&mut *tx).await?;
+            for p in pokmas.iter().filter(|p| known.contains(&p.desa_id)) {
+                sqlx::query(
+                    "INSERT INTO ref_pokmas (desa_id, nama, perdes, kepala, bendahara, sekretaris, konflik, sumber_unit_ids, synced_at) \
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())",
+                )
+                .bind(p.desa_id)
+                .bind(&p.nama)
+                .bind(&p.perdes)
+                .bind(&p.kepala)
+                .bind(&p.bendahara)
+                .bind(&p.sekretaris)
+                .bind(p.konflik)
+                .bind(&p.sumber_unit_ids)
+                .execute(&mut *tx)
+                .await?;
+                result.jumlah_pokmas += 1;
+            }
+        }
+
+        sqlx::query(MATCH_DESA_SQL).execute(&mut *tx).await?;
+        result.desa_tanpa_batas = count_desa_tanpa_batas(&mut tx).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn start_sync_run(&self, dipicu_oleh: &str) -> Result<i64, StoreError> {
+        Ok(sqlx::query_scalar("INSERT INTO sync_runs (dipicu_oleh) VALUES ($1) RETURNING id")
+            .bind(dipicu_oleh)
+            .fetch_one(&self.pool)
+            .await?)
+    }
+
+    pub async fn finish_sync_run(
+        &self,
+        id: i64,
+        status: &str,
+        result: Option<&ApplyResult>,
+        pesan: Option<&str>,
+    ) -> Result<(), StoreError> {
+        sqlx::query(
+            "UPDATE sync_runs SET selesai_at = now(), status = $2, jumlah_desa = $3, jumlah_unit = $4, \
+             jumlah_pokmas = $5, desa_tanpa_batas = $6, pesan = $7 WHERE id = $1",
+        )
+        .bind(id)
+        .bind(status)
+        .bind(result.map(|r| r.jumlah_desa as i32))
+        .bind(result.map(|r| r.jumlah_unit as i32))
+        .bind(result.map(|r| r.jumlah_pokmas as i32))
+        .bind(result.map(|r| r.desa_tanpa_batas as i32))
+        .bind(pesan)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_sync_runs(&self, limit: i64) -> Result<Vec<SyncRunRow>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, dipicu_oleh, to_char(mulai_at, 'YYYY-MM-DD HH24:MI:SS') AS mulai_at, \
+                    to_char(selesai_at, 'YYYY-MM-DD HH24:MI:SS') AS selesai_at, status, jumlah_desa, jumlah_unit, \
+                    jumlah_pokmas, desa_tanpa_batas, pesan \
+             FROM sync_runs ORDER BY id DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| SyncRunRow {
+                id: r.get("id"),
+                dipicu_oleh: r.get("dipicu_oleh"),
+                mulai_at: r.get("mulai_at"),
+                selesai_at: r.get("selesai_at"),
+                status: r.get("status"),
+                jumlah_desa: r.get("jumlah_desa"),
+                jumlah_unit: r.get("jumlah_unit"),
+                jumlah_pokmas: r.get("jumlah_pokmas"),
+                desa_tanpa_batas: r.get("desa_tanpa_batas"),
+                pesan: r.get("pesan"),
+            })
+            .collect())
+    }
+
+    /// Sinkron yang masih tercatat berjalan lebih dari 30 menit dianggap gagal (misalnya server mati di tengah).
+    pub async fn close_stale_sync_runs(&self) -> Result<u64, StoreError> {
+        Ok(sqlx::query(
+            "UPDATE sync_runs SET status = 'gagal', selesai_at = now(), pesan = 'terhenti (server berhenti sebelum selesai)' \
+             WHERE status = 'berjalan' AND mulai_at < now() - interval '30 minutes'",
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected())
+    }
+
+    /// Daftar desa aktif dengan capaian SPM. Tidak memuat nama pengurus Pokmas.
+    pub async fn list_desa(&self) -> Result<Vec<DesaSummary>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, d.bjp_master + d.bjp_unit AS bjp_kk, \
+                    d.sr, d.jiwa, d.unit_count, \
+                    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik \
+             FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id \
+             WHERE d.aktif ORDER BY d.kecamatan, d.nama",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let target: i32 = r.get("target_kk");
+                let jp: i32 = r.get("jp_kk");
+                let bjp: i32 = r.get("bjp_kk");
+                let kode: Option<String> = r.get("kode_bps");
+                DesaSummary {
+                    id: r.get("id"),
+                    nama: r.get("nama"),
+                    kecamatan: r.get("kecamatan"),
+                    punya_batas: kode.is_some(),
+                    kode_bps: kode,
+                    target_kk: target.into(),
+                    jp_kk: jp.into(),
+                    bjp_kk: bjp.into(),
+                    sr: r.get::<i32, _>("sr").into(),
+                    jiwa: r.get::<i32, _>("jiwa").into(),
+                    unit_count: r.get::<i32, _>("unit_count").into(),
+                    cakupan_persen: (target > 0)
+                        .then(|| ((jp + bjp) as f64 / target as f64 * 10_000.0).round() / 100.0),
+                    punya_pokmas: r.get("punya_pokmas"),
+                    pokmas_konflik: r.get("pokmas_konflik"),
+                }
+            })
+            .collect())
+    }
+}

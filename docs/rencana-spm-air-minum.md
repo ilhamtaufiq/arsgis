@@ -1,6 +1,6 @@
 # Rencana arsgis: SPM Air Minum + Data Jaringan Perpipaan
 
-Status: draf untuk disetujui. Belum ada kode yang diubah berdasarkan dokumen ini.
+Status: fase A selesai (25 Oktober 2026). Fase B sampai E belum dikerjakan.
 
 ## 1. Tujuan
 
@@ -39,7 +39,7 @@ Aturan:
 | Desa | 364 |
 | Unit SPAM | 364, saat ini **1 unit per desa** |
 | Pengelola (Pokmas) | Ada untuk 364 unit, tapi nama Pokmas hanya terisi **220** (60%) |
-| Perdes, kepala, bendahara, sekretaris | Sekitar 215 sampai 219 terisi |
+| Perdes, kepala, bendahara, sekretaris | **Belum terisi.** Berisi tanda `-` (215 sampai 219 unit) atau kosong. Angka 215 sampai 219 di versi awal dokumen ini keliru karena tanda `-` terhitung sebagai isi. |
 | Sistem layanan | Gravitasi 191, Pompa 26, Perpipaan 4, kosong 143 |
 | Tahun pembangunan | **Kosong semua** |
 | Capaian | 360 unit punya capaian, 189 unit punya anggaran |
@@ -137,7 +137,16 @@ Pencocokan batas desa: otomatis lewat nama kecamatan + nama desa (dinormalisasi)
 
 Urutan kerja: A, lalu B, lalu C, lalu D. Fase E menunggu keputusan.
 
-## 8. Keputusan yang dibutuhkan
+## 8. Hasil fase A
+
+- Tabel `ref_batas_desa`, `ref_desa`, `ref_desa_kode_override`, `ref_unit_spam`, `ref_pokmas`, `sync_runs` (migrasi 0006).
+- Crate `pipa-sync`: klien baca Arumanis, penurunan Pokmas per desa, pembaca GeoJSON BPS.
+- Perintah `pipa-api load-batas-desa <file>` dan `pipa-api sync`; sinkron otomatis tiap `ARUMANIS_SYNC_MENIT`.
+- Endpoint `GET /api/v1/desa`, `POST /api/v1/admin/sync`, `GET /api/v1/admin/sync-runs`; tab "Sinkron Arumanis" di halaman admin.
+- Uji dengan data asli: 364 desa, 364 unit, 364 baris Pokmas (220 bernama, 0 konflik), 360 desa cocok dengan poligon, 4 tanpa poligon. Total target, JP, BJP, cakupan 13,50%, SR 54.265, dan KK 54.029 sama persis dengan Arumanis.
+- Token Arumanis harus berbentuk `id|rahasia`. Nilai dari cookie (`id%7Crahasia`) otomatis di-decode.
+
+## 9. Keputusan yang dibutuhkan
 
 1. **Pokmas**: pakai pilihan 1 (diturunkan di arsgis, konflik ditandai) atau ubah Arumanis?
 2. **Akun layanan**: bisakah dibuatkan akun Arumanis khusus dengan hak baca saja untuk arsgis?

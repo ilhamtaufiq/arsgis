@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pipa-core", "crates/pipa-store", "crates/pipa-import", "crates/pipa-api"]
+members = ["crates/pipa-core", "crates/pipa-store", "crates/pipa-import", "crates/pipa-sync", "crates/pipa-api"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,3 +24,5 @@ jsonwebtoken = { version = "9", default-features = false }
 pipa-core = { path = "crates/pipa-core" }
 pipa-store = { path = "crates/pipa-store" }
 pipa-import = { path = "crates/pipa-import" }
+pipa-sync = { path = "crates/pipa-sync" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

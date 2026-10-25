@@ -1,6 +1,7 @@
 //! Server HTTP WebGIS perpipaan: API, autentikasi, dan penyajian frontend dari satu container.
 
 mod auth;
+mod sync;
 
 use std::{
     convert::Infallible,
@@ -34,6 +35,7 @@ const MAX_IMPORT_BYTES: usize = 20 * 1024 * 1024;
 #[derive(Clone)]
 struct AppState {
     store: Store,
+    syncer: sync::Syncer,
     jwt_secret: Vec<u8>,
     cookie_secure: bool,
 }
@@ -457,6 +459,24 @@ async fn admin_list_imports(State(state): State<AppState>, _: Admin) -> Result<J
     Ok(Json(json!({ "data": imports })))
 }
 
+/// Daftar desa dengan capaian SPM (publik, tanpa nama pengurus Pokmas).
+async fn list_desa(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let desa = state.store.list_desa().await?;
+    Ok(Json(json!({ "data": desa })))
+}
+
+async fn admin_sync(State(state): State<AppState>, Admin(me): Admin) -> Result<Json<Value>, ApiError> {
+    match state.syncer.run(&format!("admin:{}", me.username)).await {
+        Ok(report) => Ok(Json(json!(report))),
+        Err(sync::SyncBusy) => Err(ApiError(StatusCode::CONFLICT, "sinkron lain sedang berjalan".into())),
+    }
+}
+
+async fn admin_sync_runs(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
+    let runs = state.store.list_sync_runs(20).await?;
+    Ok(Json(json!({ "data": runs, "interval_menit": state.syncer.interval_menit() })))
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -477,6 +497,9 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/admin/users/{id}", axum::routing::patch(admin_update_user))
         .route("/api/v1/admin/networks", get(admin_list_networks).post(admin_create_network))
         .route("/api/v1/admin/imports", get(admin_list_imports))
+        .route("/api/v1/admin/sync", post(admin_sync))
+        .route("/api/v1/admin/sync-runs", get(admin_sync_runs))
+        .route("/api/v1/desa", get(list_desa))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
@@ -522,6 +545,48 @@ async fn create_user(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+async fn connect_and_migrate() -> Result<Store, Box<dyn std::error::Error>> {
+    let database_url = env::var("DATABASE_URL").map_err(|_| "DATABASE_URL wajib di-set")?;
+    let store = Store::connect(&database_url).await?;
+    store.migrate().await?;
+    Ok(store)
+}
+
+/// `pipa-api load-batas-desa <file.geojson>`: ganti seluruh batas desa dari GeoJSON BPS.
+async fn load_batas_desa(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let [path] = args else {
+        return Err("pemakaian: pipa-api load-batas-desa <file.geojson>".into());
+    };
+    let text = std::fs::read_to_string(path)?;
+    let batas = pipa_sync::parse_batas_desa(&text)?;
+    let rows: Vec<pipa_store::BatasInput> = batas
+        .into_iter()
+        .map(|b| pipa_store::BatasInput {
+            kode_bps: b.kode_bps,
+            kecamatan: b.kecamatan,
+            desa: b.desa,
+            geometry: b.geometry.to_string(),
+        })
+        .collect();
+    let sumber = PathBuf::from(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let store = connect_and_migrate().await?;
+    let (jumlah, tanpa) = store.replace_batas_desa(&rows, &sumber).await?;
+    println!("{jumlah} poligon desa dimuat dari {sumber}; desa aktif tanpa batas: {tanpa}");
+    Ok(())
+}
+
+/// `pipa-api sync`: sinkron sekali dari Arumanis, lalu keluar.
+async fn sync_once() -> Result<(), Box<dyn std::error::Error>> {
+    let store = connect_and_migrate().await?;
+    let syncer = sync::Syncer::new(store, sync::SyncConfig::from_env());
+    let report = syncer.run("cli").await.map_err(|_| "sinkron lain sedang berjalan")?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    if report.status == "gagal" {
+        return Err("sinkron gagal".into());
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Memuat `.env` dari folder kerja. Variabel yang sudah di-set di shell tidak ditimpa.
@@ -534,8 +599,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args: Vec<String> = env::args().skip(1).collect();
-    if args.first().map(String::as_str) == Some("create-user") {
-        return create_user(&args[1..]).await;
+    match args.first().map(String::as_str) {
+        Some("create-user") => return create_user(&args[1..]).await,
+        Some("load-batas-desa") => return load_batas_desa(&args[1..]).await,
+        Some("sync") => return sync_once().await,
+        _ => {}
     }
 
     let database_url = env::var("DATABASE_URL").map_err(|_| "DATABASE_URL wajib di-set (lihat .env.example)")?;
@@ -547,7 +615,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     store.migrate().await?;
     tracing::info!("migrasi selesai");
 
-    let state = AppState { store, jwt_secret: jwt_secret()?, cookie_secure };
+    let closed = store.close_stale_sync_runs().await?;
+    if closed > 0 {
+        tracing::warn!(closed, "catatan sinkron yang terhenti ditandai gagal");
+    }
+    let syncer = sync::Syncer::new(store.clone(), sync::SyncConfig::from_env());
+    syncer.spawn_schedule();
+
+    let state = AppState { store, syncer, jwt_secret: jwt_secret()?, cookie_secure };
     let basemap_dir = PathBuf::from(env::var("BASEMAP_DIR").unwrap_or_else(|_| "data".into()));
     let app = router(state, web_dist, basemap_dir);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

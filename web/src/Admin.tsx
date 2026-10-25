@@ -56,6 +56,7 @@ export function AdminPage() {
                 <TabsTrigger value="pengguna">Pengguna</TabsTrigger>
                 <TabsTrigger value="jaringan">Jaringan</TabsTrigger>
                 <TabsTrigger value="impor">Impor</TabsTrigger>
+                <TabsTrigger value="sinkron">Sinkron Arumanis</TabsTrigger>
               </TabsList>
               <TabsContent value="pengguna" className="flex flex-col gap-4">
                 <UsersTab currentUser={user.username} />
@@ -65,6 +66,9 @@ export function AdminPage() {
               </TabsContent>
               <TabsContent value="impor" className="flex flex-col gap-4">
                 <ImportsTab />
+              </TabsContent>
+              <TabsContent value="sinkron" className="flex flex-col gap-4">
+                <SyncTab />
               </TabsContent>
             </Tabs>
           )}
@@ -307,6 +311,100 @@ function ImportsTab() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{i.waktu}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+type SyncRun = {
+  id: number
+  dipicu_oleh: string
+  mulai_at: string
+  selesai_at: string | null
+  status: 'berjalan' | 'berhasil' | 'sebagian' | 'gagal'
+  jumlah_desa: number | null
+  jumlah_unit: number | null
+  jumlah_pokmas: number | null
+  desa_tanpa_batas: number | null
+  pesan: string | null
+}
+
+const STATUS_VARIANT: Record<SyncRun['status'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  berhasil: 'default',
+  sebagian: 'secondary',
+  gagal: 'destructive',
+  berjalan: 'outline',
+}
+
+/** Riwayat sinkron data desa, unit SPAM, dan Pokmas dari Arumanis, dengan tombol sinkron manual. */
+function SyncTab() {
+  const queryClient = useQueryClient()
+  const runs = useQuery({
+    queryKey: ['admin-sync-runs'],
+    queryFn: () => call<{ data: SyncRun[]; interval_menit: number }>('GET', '/api/v1/admin/sync-runs'),
+  })
+  const [error, setError] = useState<string | null>(null)
+
+  const sync = useMutation({
+    mutationFn: () => call('POST', '/api/v1/admin/sync'),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['admin-sync-runs'] })
+    },
+    onError: (e) => setError((e as Error).message),
+  })
+
+  const interval = runs.data?.interval_menit ?? 0
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div className="grid gap-1.5">
+          <CardTitle className="text-base">Sinkron data SPM dari Arumanis</CardTitle>
+          <CardDescription>
+            Desa, capaian, unit SPAM, dan Pokmas dibaca dari Arumanis. arsgis tidak menulis balik.{' '}
+            {interval > 0 ? `Sinkron otomatis tiap ${interval} menit.` : 'Sinkron otomatis dimatikan.'}
+          </CardDescription>
+        </div>
+        <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
+          {sync.isPending ? 'Menyinkron…' : 'Sinkron sekarang'}
+        </Button>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        {runs.data?.data.length === 0 && <p className="text-sm text-muted-foreground">Belum pernah sinkron.</p>}
+        {runs.data && runs.data.data.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mulai</TableHead>
+                <TableHead>Dipicu</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Desa</TableHead>
+                <TableHead className="text-right">Unit</TableHead>
+                <TableHead className="text-right">Pokmas</TableHead>
+                <TableHead className="text-right">Tanpa batas</TableHead>
+                <TableHead>Catatan</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {runs.data.data.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">{r.mulai_at}</TableCell>
+                  <TableCell>{r.dipicu_oleh}</TableCell>
+                  <TableCell>
+                    <Badge variant={STATUS_VARIANT[r.status]}>{r.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{r.jumlah_desa ?? '–'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.jumlah_unit ?? '–'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.jumlah_pokmas ?? '–'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.desa_tanpa_batas ?? '–'}</TableCell>
+                  <TableCell className="max-w-72 whitespace-normal text-xs text-muted-foreground">{r.pesan ?? ''}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

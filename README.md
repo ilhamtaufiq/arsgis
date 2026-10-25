@@ -32,7 +32,11 @@ psql "$DATABASE_URL" -f crates/pipa-store/seed/dev.sql
 # 5. Akun untuk login (password minimal 10 karakter, dibaca dari PIPA_PASSWORD atau stdin):
 PIPA_PASSWORD='ganti-dengan-password' cargo run -p pipa-api -- create-user admin_dev admin
 
-# 6. Frontend mode pengembangan (Vite di 5173, meneruskan /api, /healthz, /basemap ke :8080)
+# 6. Batas desa (sekali, atau saat GeoJSON diperbarui) dan sinkron data SPM dari Arumanis:
+cargo run -p pipa-api -- load-batas-desa data/batas-desa-cianjur.geojson
+cargo run -p pipa-api -- sync      # sinkron sekali; server juga menyinkron otomatis (ARUMANIS_SYNC_MENIT)
+
+# 7. Frontend mode pengembangan (Vite di 5173, meneruskan /api, /healthz, /basemap ke :8080)
 cd web && bun install && bun run dev
 ```
 
@@ -76,6 +80,9 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan batch ke jaringan; sekali saja per batch (editor, admin) |
 | GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |
 | GET | `/basemap/*` | Berkas PMTiles, dengan range request |
+| GET | `/api/v1/desa` | Desa dengan capaian dan cakupan SPM (publik, tanpa nama pengurus Pokmas) |
+| POST | `/api/v1/admin/sync` | Sinkron sekarang dari Arumanis (admin; 409 bila sinkron lain berjalan) |
+| GET | `/api/v1/admin/sync-runs` | Riwayat sinkron (admin) |
 
 ## Peran
 
@@ -87,6 +94,17 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 
 Fitur `sr` berisi data pelanggan. Endpoint GeoJSON mengembalikan 403 jika peran tidak boleh membaca jenis yang diminta.
 
+## Data SPM air minum
+
+Data desa, capaian, unit SPAM, dan Pokmas berasal dari Arumanis dan disimpan sebagai tabel referensi `ref_*`.
+arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
+
+- Desa dan capaian per desa: `GET /api/public/spam-units/map-stats` Arumanis (publik).
+- Unit SPAM, pengelola, dan capaian per unit: `GET /api/spam-units` Arumanis (butuh `ARUMANIS_TOKEN`).
+- Pokmas: satu per desa, diturunkan dari pengelola unit dengan id terkecil. Bila unit-unit di satu desa mencatat nama berbeda, `konflik` bernilai true.
+- Batas desa: `data/batas-desa-cianjur.geojson` (HDX-BPS 2020, 360 desa). Desa dicocokkan lewat nama kecamatan + desa; koreksi manual di tabel `ref_desa_kode_override`.
+- Sinkron yang gagal tidak menghapus data. Bila Arumanis mengembalikan 0 desa atau 0 unit, data lama dipertahankan.
+
 ## Variabel lingkungan
 
 | Nama | Wajib | Keterangan |
@@ -96,6 +114,9 @@ Fitur `sr` berisi data pelanggan. Endpoint GeoJSON mengembalikan 403 jika peran 
 | `PORT` | tidak | Default 8080 |
 | `WEB_DIST` | tidak | Default `web/dist` |
 | `BASEMAP_DIR` | tidak | Default `data` |
+| `ARUMANIS_API_URL` | tidak | Default `https://apiamis.cianjur.space/api` |
+| `ARUMANIS_TOKEN` | tidak | Token akun Arumanis baca saja, untuk unit SPAM dan Pokmas |
+| `ARUMANIS_SYNC_MENIT` | tidak | Jeda sinkron otomatis, default 60; 0 mematikan |
 | `COOKIE_SECURE` | tidak | Set `true` di produksi (HTTPS) |
 | `RUST_LOG` | tidak | Filter log tracing |
 
