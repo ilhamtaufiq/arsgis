@@ -17,6 +17,8 @@ type Props = {
   /** Poligon desa dengan capaian SPM. Undefined selama belum dimuat. */
   desa?: DesaGeo
   showCakupan: boolean
+  /** Desa unit yang dipilih. Peta dipusatkan ke batas desa ini saat unit berganti. */
+  focusDesaId?: number | null
   onBboxChange: (bbox: Bbox) => void
 }
 
@@ -56,7 +58,7 @@ function desaStyle(feature?: GeoJSON.Feature): L.PathOptions {
   }
 }
 
-export function MapView({ features, desa, showCakupan, onBboxChange }: Props) {
+export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.GeoJSON | null>(null)
@@ -147,6 +149,17 @@ export function MapView({ features, desa, showCakupan, onBboxChange }: Props) {
     if (desa) desaLayer.addData(desa as FeatureCollection)
     layerRef.current?.bringToFront()
   }, [desa])
+
+  // Unit dipilih: pusatkan ke batas desanya. Dilakukan sekali per pilihan, bukan saat poligon dimuat ulang.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || focusDesaId == null || !desa) return
+    const poligon = desa.features.find((f) => f.properties.id === focusDesaId)
+    if (!poligon) return
+    const bounds = L.geoJSON(poligon).getBounds()
+    if (bounds.isValid()) map.fitBounds(bounds, { maxZoom: 16, padding: [40, 40] })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusDesaId])
 
   useEffect(() => {
     const map = mapRef.current

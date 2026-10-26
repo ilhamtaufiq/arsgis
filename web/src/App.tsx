@@ -31,8 +31,9 @@ export function App() {
   const user = me.data ?? null
   const customerAllowed = canSeeCustomerData(user)
 
-  const firstNetwork = networks.data?.[0]?.id
-  if (networkId === null && firstNetwork !== undefined) setNetwork(firstNetwork)
+  // Peta dimulai tanpa unit. Jaringan (unit SPAM) dipilih pengguna; cakupan desa tampil tanpa pilihan.
+  const units = (networks.data ?? []).filter((n) => n.unit_spam_id !== null)
+  const unitName = units.find((n) => n.id === networkId)?.nama
 
   // Sr hanya ikut diminta bila peran mengizinkan, supaya data pelanggan tidak dikirim ke pengunjung.
   const activeLayers: FeatureType[] = DEFAULT_LAYERS.filter((t) => customerAllowed || t !== 'sr')
@@ -65,25 +66,29 @@ export function App() {
           features={visible}
           desa={desaGeo.data}
           showCakupan={cakupanOpen}
+          focusDesaId={units.find((n) => n.id === networkId)?.desa_id ?? null}
           onBboxChange={handleBbox}
         />
 
         <div className="float-top">
           <div className="brand">
             <strong>arsgis</strong>
-            {networks.data && networks.data.length > 1 ? (
+            {units.length > 0 ? (
               <select
                 className="network-select"
-                aria-label="Pilih jaringan"
+                aria-label="Pilih unit SPAM"
                 value={networkId ?? ''}
                 onChange={(e) => setNetwork(Number(e.target.value))}
               >
-                {networks.data.map((n) => (
+                <option value="" disabled>
+                  Pilih unit SPAM…
+                </option>
+                {units.map((n) => (
                   <option key={n.id} value={n.id}>{n.nama}</option>
                 ))}
               </select>
             ) : (
-              <span>{networks.data?.[0]?.nama ?? 'memuat jaringan…'}</span>
+              <span>{networks.isPending ? 'memuat unit…' : 'belum ada unit SPAM'}</span>
             )}
           </div>
           <SearchBox features={visible} />
@@ -117,7 +122,8 @@ export function App() {
         <div className="notices">
           {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
           {features.isError && <div className="banner">{(features.error as Error).message}</div>}
-          {features.isFetching && <div className="status">Memuat fitur…</div>}
+          {networkId === null && units.length > 0 && <div className="banner">Pilih unit SPAM untuk melihat jaringan pipa dan sambungan rumah.</div>}
+          {networkId !== null && features.isFetching && <div className="status">Memuat fitur {unitName ? `· ${unitName}` : ''}…</div>}
         </div>
 
         {cakupanOpen && <Legend />}
