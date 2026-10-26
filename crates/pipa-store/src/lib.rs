@@ -919,3 +919,105 @@ impl Store {
         })
     }
 }
+
+// ---------------------------------------------------------------------------
+// Kelengkapan data per desa (fase D)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KelengkapanDesa {
+    pub id: i64,
+    pub nama: String,
+    pub kecamatan: String,
+    pub punya_batas: bool,
+    pub punya_pokmas: bool,
+    pub pokmas_konflik: bool,
+    /// SR tercatat di Arumanis (jumlah capaian unit).
+    pub sr_tercatat: i64,
+    /// SR yang sudah dipetakan di arsgis (fitur sr di unit-unit desa).
+    pub sr_peta: i64,
+    pub pipa_km: f64,
+    pub unit_count: i64,
+    pub status: &'static str,
+}
+
+/// Status kelengkapan, urut prioritas: tanpa batas (tidak bisa diperiksa) > belum dipetakan > selisih SR > lengkap.
+pub fn status_kelengkapan(punya_batas: bool, sr_tercatat: i64, sr_peta: i64, pipa_km: f64) -> &'static str {
+    if !punya_batas {
+        "tanpa_batas"
+    } else if sr_peta == 0 && pipa_km == 0.0 {
+        "belum_dipetakan"
+    } else if sr_peta != sr_tercatat {
+        "selisih_sr"
+    } else {
+        "lengkap"
+    }
+}
+
+impl Store {
+    pub async fn kelengkapan_desa(&self) -> Result<Vec<KelengkapanDesa>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT d.id, d.nama, d.kecamatan, d.kode_bps IS NOT NULL AS punya_batas, \
+                    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik, \
+                    d.sr AS sr_tercatat, d.unit_count, \
+                    (SELECT COUNT(*) FROM features f JOIN networks n ON n.id = f.network_id \
+                       WHERE n.desa_id = d.id AND n.unit_spam_id IS NOT NULL AND f.deleted_at IS NULL \
+                         AND f.feature_type = 'sr') AS sr_peta, \
+                    (SELECT COALESCE(SUM(f.panjang_m), 0)::float8 / 1000.0 FROM features f JOIN networks n ON n.id = f.network_id \
+                       WHERE n.desa_id = d.id AND n.unit_spam_id IS NOT NULL AND f.deleted_at IS NULL \
+                         AND f.feature_type = 'pipa') AS pipa_km \
+             FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id \
+             WHERE d.aktif ORDER BY d.kecamatan, d.nama",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let punya_batas: bool = r.get("punya_batas");
+                let sr_tercatat: i64 = r.get::<i32, _>("sr_tercatat").into();
+                let sr_peta: i64 = r.get("sr_peta");
+                let pipa_km: f64 = r.get("pipa_km");
+                KelengkapanDesa {
+                    id: r.get("id"),
+                    nama: r.get("nama"),
+                    kecamatan: r.get("kecamatan"),
+                    punya_batas,
+                    punya_pokmas: r.get("punya_pokmas"),
+                    pokmas_konflik: r.get("pokmas_konflik"),
+                    sr_tercatat,
+                    sr_peta,
+                    pipa_km,
+                    unit_count: r.get::<i32, _>("unit_count").into(),
+                    status: status_kelengkapan(punya_batas, sr_tercatat, sr_peta, pipa_km),
+                }
+            })
+            .collect())
+    }
+}
+
+#[cfg(test)]
+mod kelengkapan_tests {
+    use super::status_kelengkapan;
+
+    #[test]
+    fn tanpa_batas_mengalahkan_status_lain() {
+        assert_eq!(status_kelengkapan(false, 100, 0, 0.0), "tanpa_batas");
+    }
+
+    #[test]
+    fn belum_dipetakan_bila_tanpa_fitur() {
+        assert_eq!(status_kelengkapan(true, 440, 0, 0.0), "belum_dipetakan");
+    }
+
+    #[test]
+    fn selisih_bila_sr_peta_tidak_sama() {
+        assert_eq!(status_kelengkapan(true, 440, 10, 1.2), "selisih_sr");
+        assert_eq!(status_kelengkapan(true, 0, 3, 0.0), "selisih_sr");
+    }
+
+    #[test]
+    fn lengkap_bila_sr_sama() {
+        assert_eq!(status_kelengkapan(true, 12, 12, 0.8), "lengkap");
+    }
+}

@@ -7,6 +7,7 @@ import { fetchDashboard } from './dashboardApi'
 import { AppSidebar } from '@/components/app-sidebar'
 import { FeaturesChart } from '@/components/features-chart'
 import { ImportsTable } from '@/components/imports-table'
+import { KelengkapanCard } from './KelengkapanCard'
 import { SectionCards } from '@/components/section-cards'
 import { SiteHeader } from '@/components/site-header'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -108,6 +109,8 @@ export function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {(me.data?.role === 'editor' || me.data?.role === 'admin') && <KelengkapanCard />}
 
           {bisaSr && <ImportsTable rows={data.data?.impor_terakhir ?? []} />}
         </main>

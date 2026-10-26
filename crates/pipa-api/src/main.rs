@@ -512,6 +512,25 @@ async fn desa_geojson(State(state): State<AppState>) -> Result<Response, ApiErro
     Ok(response)
 }
 
+/// Kelengkapan data per desa: SR tercatat vs SR di peta, pipa, batas, dan Pokmas. Hanya editor dan admin.
+async fn kelengkapan(State(state): State<AppState>, _: Editor) -> Result<Json<Value>, ApiError> {
+    let rows = state.store.kelengkapan_desa().await?;
+    let mut por_status: BTreeMap<&str, i64> = BTreeMap::new();
+    for r in &rows {
+        *por_status.entry(r.status).or_default() += 1;
+    }
+    let ringkasan = json!({
+        "jumlah_desa": rows.len(),
+        "per_status": por_status,
+        "sr_tercatat": rows.iter().map(|r| r.sr_tercatat).sum::<i64>(),
+        "sr_peta": rows.iter().map(|r| r.sr_peta).sum::<i64>(),
+        "pipa_km": rows.iter().map(|r| r.pipa_km).sum::<f64>(),
+        "tanpa_pokmas": rows.iter().filter(|r| !r.punya_pokmas).count(),
+        "pokmas_konflik": rows.iter().filter(|r| r.pokmas_konflik).count(),
+    });
+    Ok(Json(json!({ "ringkasan": ringkasan, "data": rows })))
+}
+
 async fn admin_sync(State(state): State<AppState>, Admin(me): Admin) -> Result<Json<Value>, ApiError> {
     match state.syncer.run(&format!("admin:{}", me.username)).await {
         Ok(report) => Ok(Json(json!(report))),
@@ -548,6 +567,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/admin/sync-runs", get(admin_sync_runs))
         .route("/api/v1/desa", get(list_desa))
         .route("/api/v1/desa/geojson", get(desa_geojson))
+        .route("/api/v1/dashboard/kelengkapan", get(kelengkapan))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
