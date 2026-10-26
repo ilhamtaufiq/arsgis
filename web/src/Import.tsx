@@ -37,7 +37,8 @@ export function ImportPanel({ networkId, open, onClose }: Props) {
     setBusy(true)
     setMessage(null)
     try {
-      setStaged(await uploadKml(file, titik))
+      if (networkId === null) throw new Error('Pilih unit SPAM tujuan di header dulu.')
+      setStaged(await uploadKml(file, titik, networkId))
     } catch (err) {
       setStaged(null)
       setMessage((err as Error).message)
@@ -51,8 +52,8 @@ export function ImportPanel({ networkId, open, onClose }: Props) {
     setBusy(true)
     setMessage(null)
     try {
-      const n = await commitImport(staged.id, networkId)
-      setMessage(`${n} fitur disimpan ke jaringan.`)
+      const { ditulis, dilewati } = await commitImport(staged.id, networkId)
+      setMessage(`${ditulis} fitur disimpan${dilewati > 0 ? `, ${dilewati} dilewati karena di luar batas desa` : ''}.`)
       setStaged(null)
       setFile(null)
       await queryClient.invalidateQueries({ queryKey: ['features'] })
@@ -86,6 +87,13 @@ export function ImportPanel({ networkId, open, onClose }: Props) {
             <strong>{staged.nama_file}</strong>: {staged.laporan.jumlah_fitur} fitur siap disimpan
             {staged.laporan.bukan_fitur > 0 && `, ${staged.laporan.bukan_fitur} gambar dilewati`}.
           </p>
+          {staged.laporan.dalam_batas !== undefined && (
+            <p>
+              Di dalam batas desa: <strong>{staged.laporan.dalam_batas}</strong>
+              {(staged.laporan.luar_batas ?? 0) > 0 && <> · di luar: <strong>{staged.laporan.luar_batas}</strong> (tidak disimpan)</>}
+              {(staged.laporan.tanpa_batas ?? 0) > 0 && <> · desa belum punya batas: {staged.laporan.tanpa_batas}</>}
+            </p>
+          )}
           <ul>
             {Object.entries(staged.laporan.per_jenis).map(([jenis, n]) => (
               <li key={jenis}>{LABEL[jenis] ?? jenis}: {n}</li>

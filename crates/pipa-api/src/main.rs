@@ -220,6 +220,8 @@ impl FromRequestParts<AppState> for Editor {
 
 #[derive(Deserialize)]
 struct UploadParams {
+    /// Jaringan (= unit SPAM) tujuan impor. Wajib.
+    network_id: Option<i64>,
     nama_file: Option<String>,
     /// Jenis untuk Point yang namanya tidak menyebut jenis, misalnya `sr`.
     titik: Option<String>,
@@ -241,6 +243,12 @@ async fn upload_import(
     }
     let xml = std::str::from_utf8(&body)
         .map_err(|_| ApiError(StatusCode::BAD_REQUEST, "berkas bukan teks UTF-8".into()))?;
+    let network_id = params
+        .network_id
+        .ok_or_else(|| bad_request("network_id wajib: pilih unit SPAM tujuan impor"))?;
+    if state.store.network_unit(network_id).await?.is_none() {
+        return Err(bad_request("jaringan ini bukan unit SPAM dengan desa, impor tidak bisa dilakukan"));
+    }
     let titik = params.titik.as_deref().map(FeatureType::parse).transpose()?;
     let preview = pipa_import::parse_kml(xml, titik).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e.to_string()))?;
 
@@ -274,9 +282,17 @@ async fn upload_import(
         })
         .collect();
     let nama_file = params.nama_file.unwrap_or_else(|| "impor.kml".into());
-    let id = state.store.create_batch(&nama_file, &laporan, &user.username, &rows).await?;
+    let id = state
+        .store
+        .create_batch(&nama_file, &laporan, &user.username, network_id, &rows)
+        .await?;
+    let batch = state
+        .store
+        .get_batch(id)
+        .await?
+        .ok_or_else(|| internal("batch hilang sesaat setelah dibuat"))?;
 
-    Ok((StatusCode::CREATED, Json(json!({ "id": id, "status": "staged", "nama_file": nama_file, "laporan": laporan }))).into_response())
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "status": "staged", "nama_file": nama_file, "network_id": network_id, "laporan": batch.laporan }))).into_response())
 }
 
 async fn get_import(State(state): State<AppState>, _: Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
@@ -306,7 +322,13 @@ async fn commit_import(
         return Err(ApiError(StatusCode::BAD_REQUEST, "jaringan tidak ditemukan".into()));
     }
     match state.store.commit_batch(id, params.network_id).await? {
-        CommitOutcome::Committed(n) => Ok(Json(json!({ "id": id, "status": "committed", "fitur_ditulis": n }))),
+        CommitOutcome::Committed { ditulis, dilewati } => Ok(Json(json!({
+            "id": id,
+            "status": "committed",
+            "fitur_ditulis": ditulis,
+            "fitur_dilewati": dilewati,
+        }))),
+        CommitOutcome::NetworkMismatch => Err(bad_request("jaringan tidak sama dengan tujuan batch impor")),
         CommitOutcome::NotFound => Err(ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into())),
         CommitOutcome::AlreadyCommitted => Err(ApiError(StatusCode::CONFLICT, "batch sudah di-commit".into())),
     }

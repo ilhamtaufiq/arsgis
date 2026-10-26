@@ -75,9 +75,9 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | GET | `/api/v1/networks/:id/geojson?bbox=w,s,e,n&types=pipa,valve` | FeatureCollection dalam bbox, maksimal 2° per sisi dan 50.000 fitur. Tanpa `types`, hanya jenis publik yang dikembalikan. |
 | POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
 | POST | `/api/v1/auth/logout` | Hapus cookie sesi |
-| POST | `/api/v1/imports?nama_file=...&titik=sr` | Unggah KML ke staging dan dapatkan laporan (editor, admin) |
+| POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr` | Unggah KML ke staging untuk satu unit SPAM (`network_id` wajib). Fitur diperiksa terhadap batas desa unit. (editor, admin) |
 | GET | `/api/v1/imports/:id` | Laporan dan status batch impor (editor, admin) |
-| POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan batch ke jaringan; sekali saja per batch (editor, admin) |
+| POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan fitur yang di dalam batas desa; fitur di luar dilewati. Sekali saja per batch (editor, admin) |
 | GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |
 | GET | `/basemap/*` | Berkas PMTiles, dengan range request |
 | GET | `/api/v1/desa` | Desa dengan capaian dan cakupan SPM (publik, tanpa nama pengurus Pokmas) |
@@ -103,6 +103,8 @@ arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
 - Unit SPAM, pengelola, dan capaian per unit: `GET /api/spam-units` Arumanis (butuh `ARUMANIS_TOKEN`).
 - Pokmas: satu per desa, diturunkan dari pengelola unit dengan id terkecil. Bila unit-unit di satu desa mencatat nama berbeda, `konflik` bernilai true.
 - Batas desa: `data/batas-desa-cianjur.geojson` (HDX-BPS 2020, 360 desa). Desa dicocokkan lewat nama kecamatan + desa; koreksi manual di tabel `ref_desa_kode_override`.
+- Setiap unit SPAM punya satu baris di `networks` (`unit_spam_id`, `desa_id`), dibuat dan diperbarui saat sinkron. Impor dan peta memakai baris ini sebagai jaringan.
+- Impor per unit: titik harus berada di dalam batas desa unit; garis diterima bila minimal separuh panjangnya di dalam batas. Fitur di luar tidak disimpan. Desa tanpa batas tidak bisa diimpor.
 - Sinkron yang gagal tidak menghapus data. Bila Arumanis mengembalikan 0 desa atau 0 unit, data lama dipertahankan.
 
 ## Variabel lingkungan

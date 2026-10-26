@@ -213,26 +213,30 @@ pub struct BatchRow {
 
 #[derive(Debug, PartialEq)]
 pub enum CommitOutcome {
-    Committed(u64),
+    Committed { ditulis: u64, dilewati: i64 },
     NotFound,
     AlreadyCommitted,
+    NetworkMismatch,
 }
 
 impl Store {
+    /// Simpan batch impor untuk satu unit (`network_id`), lalu periksa setiap fitur terhadap batas desa unit itu.
     pub async fn create_batch(
         &self,
         nama_file: &str,
         laporan: &serde_json::Value,
         dibuat_oleh: &str,
+        network_id: i64,
         rows: &[StagingRow],
     ) -> Result<i64, StoreError> {
         let mut tx = self.pool.begin().await?;
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh) VALUES ($1, $2, $3) RETURNING id",
+            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh, network_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(nama_file)
         .bind(laporan)
         .bind(dibuat_oleh)
+        .bind(network_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -249,6 +253,38 @@ impl Store {
             .execute(&mut *tx)
             .await?;
         }
+
+        // Titik harus berada di dalam batas desa. Garis diterima bila minimal separuh panjangnya di dalam batas,
+        // karena pipa transmisi bisa melintasi desa tetangga.
+        sqlx::query(
+            "UPDATE import_staging s SET dalam_batas = CASE \
+                 WHEN GeometryType(s.geom) = 'POINT' THEN ST_Covers(b.geom, s.geom) \
+                 ELSE ST_Length(ST_Intersection(b.geom, s.geom)) >= 0.5 * ST_Length(s.geom) END \
+             FROM networks n JOIN ref_desa d ON d.id = n.desa_id JOIN ref_batas_desa b ON b.kode_bps = d.kode_bps \
+             WHERE s.batch_id = $1 AND n.id = $2",
+        )
+        .bind(id)
+        .bind(network_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let (dalam, luar, tanpa): (i64, i64, i64) = sqlx::query_as(
+            "SELECT COUNT(*) FILTER (WHERE dalam_batas), COUNT(*) FILTER (WHERE dalam_batas = false), \
+                    COUNT(*) FILTER (WHERE dalam_batas IS NULL) FROM import_staging WHERE batch_id = $1",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE import_batches SET laporan = laporan || jsonb_build_object('dalam_batas', $2::bigint, \
+             'luar_batas', $3::bigint, 'tanpa_batas', $4::bigint) WHERE id = $1",
+        )
+        .bind(id)
+        .bind(dalam)
+        .bind(luar)
+        .bind(tanpa)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(id)
     }
@@ -270,37 +306,47 @@ impl Store {
         }))
     }
 
-    /// Memindahkan staging batch ke `features`. Batch yang sudah di-commit tidak bisa diulang.
+    /// Pindahkan fitur staging yang berada di dalam batas ke `features`. Fitur di luar batas dilewati.
+    /// Batch yang sudah di-commit tidak bisa diulang, dan `network_id` harus sama dengan unit batch.
     pub async fn commit_batch(&self, id: i64, network_id: i64) -> Result<CommitOutcome, StoreError> {
         let mut tx = self.pool.begin().await?;
-        let status: Option<String> =
-            sqlx::query_scalar("SELECT status FROM import_batches WHERE id = $1 FOR UPDATE")
+        let batch: Option<(String, Option<i64>)> =
+            sqlx::query_as("SELECT status, network_id FROM import_batches WHERE id = $1 FOR UPDATE")
                 .bind(id)
                 .fetch_optional(&mut *tx)
                 .await?;
-        match status.as_deref() {
-            None => return Ok(CommitOutcome::NotFound),
-            Some("committed") => return Ok(CommitOutcome::AlreadyCommitted),
-            Some(_) => {}
+        let Some((status, batch_network)) = batch else {
+            return Ok(CommitOutcome::NotFound);
+        };
+        if status == "committed" {
+            return Ok(CommitOutcome::AlreadyCommitted);
+        }
+        if batch_network != Some(network_id) {
+            return Ok(CommitOutcome::NetworkMismatch);
         }
 
         let result = sqlx::query(
             "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, import_batch_id) \
              SELECT $2, feature_type, geom, nama, diameter_mm, batch_id \
-             FROM import_staging WHERE batch_id = $1",
+             FROM import_staging WHERE batch_id = $1 AND dalam_batas IS TRUE",
         )
         .bind(id)
         .bind(network_id)
         .execute(&mut *tx)
         .await?;
+        let dilewati: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM import_staging WHERE batch_id = $1 AND dalam_batas IS NOT TRUE",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
 
-        sqlx::query("UPDATE import_batches SET status = 'committed', network_id = $2 WHERE id = $1")
+        sqlx::query("UPDATE import_batches SET status = 'committed' WHERE id = $1")
             .bind(id)
-            .bind(network_id)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
-        Ok(CommitOutcome::Committed(result.rows_affected()))
+        Ok(CommitOutcome::Committed { ditulis: result.rows_affected(), dilewati })
     }
 }
 
@@ -679,6 +725,24 @@ impl Store {
                 .bind(u.bjp_kk as i32)
                 .execute(&mut *tx)
                 .await?;
+                // Setiap unit SPAM punya satu baris di `networks`: tujuan impor dan penanda unit untuk peta.
+                let nama_desa = desa.iter().find(|d| d.id == u.desa_id).map(|d| d.nama.as_str()).unwrap_or("-");
+                let nama_unit = format!("{} · {}", nama_desa, u.nama.as_deref().unwrap_or(&format!("Unit #{}", u.id)));
+                let diperbarui = sqlx::query("UPDATE networks SET nama = $2, desa_id = $3 WHERE unit_spam_id = $1")
+                    .bind(u.id)
+                    .bind(&nama_unit)
+                    .bind(u.desa_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected();
+                if diperbarui == 0 {
+                    sqlx::query("INSERT INTO networks (nama, unit_spam_id, desa_id) VALUES ($1, $2, $3)")
+                        .bind(&nama_unit)
+                        .bind(u.id)
+                        .bind(u.desa_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
                 result.jumlah_unit += 1;
             }
 
@@ -839,4 +903,19 @@ const DESA_SUMMARY_GEO_SQL: &str = "SELECT d.id, d.nama, d.kecamatan, d.kode_bps
 pub struct DesaGeo {
     pub summary: DesaSummary,
     pub geometry: String,
+}
+
+impl Store {
+    /// Unit SPAM dan desa dari sebuah jaringan (baris `networks`). None bila jaringan tidak ada atau bukan unit.
+    pub async fn network_unit(&self, network_id: i64) -> Result<Option<(i64, i64)>, StoreError> {
+        let row: Option<(Option<i64>, Option<i64>)> =
+            sqlx::query_as("SELECT unit_spam_id, desa_id FROM networks WHERE id = $1")
+                .bind(network_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(match row {
+            Some((Some(unit), Some(desa))) => Some((unit, desa)),
+            _ => None,
+        })
+    }
 }
