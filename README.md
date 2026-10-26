@@ -121,6 +121,8 @@ arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
 | `ARUMANIS_TOKEN` | tidak | Token akun Arumanis baca saja, untuk unit SPAM dan Pokmas |
 | `ARUMANIS_SYNC_MENIT` | tidak | Jeda sinkron otomatis, default 60; 0 mematikan |
 | `COOKIE_SECURE` | tidak | Set `true` di produksi (HTTPS) |
+| `ADMIN_USERNAME` | tidak | Username admin awal, default `admin` |
+| `ADMIN_PASSWORD` | tidak | Dibuat admin awal saat startup bila username belum ada. Minimal 10 karakter, server tidak mulai jika kurang. Kosong = tidak dibuat. Tidak mengubah password user yang sudah ada. |
 | `RUST_LOG` | tidak | Filter log tracing |
 
 ## Catatan keamanan

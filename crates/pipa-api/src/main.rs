@@ -639,6 +639,27 @@ async fn connect_and_migrate() -> Result<Store, Box<dyn std::error::Error>> {
     Ok(store)
 }
 
+/// Membuat admin awal saat startup bila belum ada. Kredensial dari env, tidak tertulis di kode:
+/// `ADMIN_USERNAME` (default `admin`) dan `ADMIN_PASSWORD` (minimal 10 karakter).
+/// Bila pengguna itu sudah ada, tidak ada yang diubah, termasuk kata sandinya.
+async fn ensure_admin(store: &Store) -> Result<(), Box<dyn std::error::Error>> {
+    let username = env::var("ADMIN_USERNAME").ok().map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).unwrap_or_else(|| "admin".into());
+    let Some(password) = env::var("ADMIN_PASSWORD").ok().filter(|p| !p.is_empty()) else {
+        tracing::info!("ADMIN_PASSWORD kosong: admin awal tidak dibuat otomatis");
+        return Ok(());
+    };
+    if password.chars().count() < 10 {
+        return Err("ADMIN_PASSWORD minimal 10 karakter".into());
+    }
+    if store.find_user(&username).await?.is_some() {
+        return Ok(());
+    }
+    let hash = auth::hash_password(&password)?;
+    store.create_user(&username, &hash, "admin").await?;
+    tracing::info!(username = %username, "admin awal dibuat dari ADMIN_USERNAME/ADMIN_PASSWORD");
+    Ok(())
+}
+
 /// `pipa-api load-batas-desa <file.geojson>`: ganti seluruh batas desa dari GeoJSON BPS.
 async fn load_batas_desa(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let [path] = args else {
@@ -701,6 +722,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = Store::connect(&database_url).await?;
     store.migrate().await?;
     tracing::info!("migrasi selesai");
+    ensure_admin(&store).await?;
 
     let closed = store.close_stale_sync_runs().await?;
     if closed > 0 {
