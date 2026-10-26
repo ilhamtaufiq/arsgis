@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
 import { ImportPanel } from './Import'
-import { InfoPanel } from './InfoPanel'
+import { DesaInfo, InfoPanel } from './InfoPanel'
+import { fetchDesaGeo } from './cakupanApi'
+import { Legend } from './Legend'
 import { MapView } from './MapView'
 import { SearchBox } from './Search'
 import { DEFAULT_LAYERS, DEFAULT_PIPE_FUNCTIONS, useMapStore } from './store'
@@ -14,6 +16,10 @@ export function App() {
   const bbox = useMapStore((s) => s.bbox)
   const selected = useMapStore((s) => s.selected)
   const importOpen = useMapStore((s) => s.importOpen)
+  const cakupanOpen = useMapStore((s) => s.cakupanOpen)
+  const desaSelected = useMapStore((s) => s.desaSelected)
+  const toggleCakupan = useMapStore((s) => s.toggleCakupan)
+  const selectDesa = useMapStore((s) => s.selectDesa)
   const setNetwork = useMapStore((s) => s.setNetwork)
   const setBbox = useMapStore((s) => s.setBbox)
   const select = useMapStore((s) => s.select)
@@ -21,6 +27,7 @@ export function App() {
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  const desaGeo = useQuery({ queryKey: ['desa-geo'], queryFn: fetchDesaGeo, staleTime: 5 * 60_000 })
   const user = me.data ?? null
   const customerAllowed = canSeeCustomerData(user)
 
@@ -54,7 +61,12 @@ export function App() {
   return (
     <div className="app">
       <main className="stage">
-        <MapView features={visible} onBboxChange={handleBbox} />
+        <MapView
+          features={visible}
+          desa={desaGeo.data}
+          showCakupan={cakupanOpen}
+          onBboxChange={handleBbox}
+        />
 
         <div className="float-top">
           <div className="brand">
@@ -83,6 +95,11 @@ export function App() {
         </div>
 
         <div className="toolbar">
+          <button type="button" className="round" aria-label="Cakupan SPM" aria-pressed={cakupanOpen} onClick={toggleCakupan}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            </svg>
+          </button>
           <a className="round" href="/dashboard" aria-label="Dashboard" title="Dashboard">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
               <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -103,7 +120,12 @@ export function App() {
           {features.isFetching && <div className="status">Memuat fitur…</div>}
         </div>
 
-        <InfoPanel feature={selected} onClose={() => select(null)} />
+        {cakupanOpen && <Legend />}
+        {desaSelected ? (
+          <DesaInfo desa={desaSelected} onClose={() => selectDesa(null)} />
+        ) : (
+          <InfoPanel feature={selected} onClose={() => select(null)} />
+        )}
       </main>
     </div>
   )

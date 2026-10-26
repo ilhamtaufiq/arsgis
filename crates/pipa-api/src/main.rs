@@ -465,6 +465,31 @@ async fn list_desa(State(state): State<AppState>) -> Result<Json<Value>, ApiErro
     Ok(Json(json!({ "data": desa })))
 }
 
+/// Poligon desa dengan capaian SPM, untuk peta cakupan. Publik; nama pengurus tidak ikut.
+async fn desa_geojson(State(state): State<AppState>) -> Result<Response, ApiError> {
+    let rows = state.store.desa_geo().await?;
+    let features: Vec<Value> = rows
+        .into_iter()
+        .filter_map(|d| {
+            let geometry: Value = serde_json::from_str(&d.geometry).ok()?;
+            Some(json!({
+                "type": "Feature",
+                "id": d.summary.id,
+                "geometry": geometry,
+                "properties": d.summary,
+            }))
+        })
+        .collect();
+    let mut response = Json(json!({ "type": "FeatureCollection", "features": features })).into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("application/geo+json"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300"));
+    Ok(response)
+}
+
 async fn admin_sync(State(state): State<AppState>, Admin(me): Admin) -> Result<Json<Value>, ApiError> {
     match state.syncer.run(&format!("admin:{}", me.username)).await {
         Ok(report) => Ok(Json(json!(report))),
@@ -500,6 +525,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/admin/sync", post(admin_sync))
         .route("/api/v1/admin/sync-runs", get(admin_sync_runs))
         .route("/api/v1/desa", get(list_desa))
+        .route("/api/v1/desa/geojson", get(desa_geojson))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.

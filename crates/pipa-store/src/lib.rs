@@ -778,40 +778,65 @@ impl Store {
 
     /// Daftar desa aktif dengan capaian SPM. Tidak memuat nama pengurus Pokmas.
     pub async fn list_desa(&self) -> Result<Vec<DesaSummary>, StoreError> {
-        let rows = sqlx::query(
-            "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, d.bjp_master + d.bjp_unit AS bjp_kk, \
-                    d.sr, d.jiwa, d.unit_count, \
-                    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik \
-             FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id \
-             WHERE d.aktif ORDER BY d.kecamatan, d.nama",
-        )
+        let rows = sqlx::query(&format!("{DESA_SUMMARY_SQL} WHERE d.aktif ORDER BY d.kecamatan, d.nama"))
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.iter().map(desa_summary_from_row).collect())
+    }
+
+    /// Desa beserta poligon batasnya, untuk peta cakupan. Desa tanpa poligon tidak disertakan.
+    pub async fn desa_geo(&self) -> Result<Vec<DesaGeo>, StoreError> {
+        let rows = sqlx::query(&format!(
+            "{DESA_SUMMARY_GEO_SQL} JOIN ref_batas_desa b ON b.kode_bps = d.kode_bps WHERE d.aktif ORDER BY d.id"
+        ))
         .fetch_all(&self.pool)
         .await?;
         Ok(rows
             .iter()
-            .map(|r| {
-                let target: i32 = r.get("target_kk");
-                let jp: i32 = r.get("jp_kk");
-                let bjp: i32 = r.get("bjp_kk");
-                let kode: Option<String> = r.get("kode_bps");
-                DesaSummary {
-                    id: r.get("id"),
-                    nama: r.get("nama"),
-                    kecamatan: r.get("kecamatan"),
-                    punya_batas: kode.is_some(),
-                    kode_bps: kode,
-                    target_kk: target.into(),
-                    jp_kk: jp.into(),
-                    bjp_kk: bjp.into(),
-                    sr: r.get::<i32, _>("sr").into(),
-                    jiwa: r.get::<i32, _>("jiwa").into(),
-                    unit_count: r.get::<i32, _>("unit_count").into(),
-                    cakupan_persen: (target > 0)
-                        .then(|| ((jp + bjp) as f64 / target as f64 * 10_000.0).round() / 100.0),
-                    punya_pokmas: r.get("punya_pokmas"),
-                    pokmas_konflik: r.get("pokmas_konflik"),
-                }
-            })
+            .map(|r| DesaGeo { summary: desa_summary_from_row(r), geometry: r.get("geometry") })
             .collect())
     }
+}
+
+/// Kolom ringkasan desa. Pokmas hanya diwakili oleh flag, nama pengurus tidak ikut.
+const DESA_SUMMARY_SQL: &str = "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, \
+    d.bjp_master + d.bjp_unit AS bjp_kk, d.sr, d.jiwa, d.unit_count, \
+    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik \
+    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id";
+
+fn desa_summary_from_row(r: &PgRow) -> DesaSummary {
+    let target: i32 = r.get("target_kk");
+    let jp: i32 = r.get("jp_kk");
+    let bjp: i32 = r.get("bjp_kk");
+    let kode: Option<String> = r.get("kode_bps");
+    DesaSummary {
+        id: r.get("id"),
+        nama: r.get("nama"),
+        kecamatan: r.get("kecamatan"),
+        punya_batas: kode.is_some(),
+        kode_bps: kode,
+        target_kk: target.into(),
+        jp_kk: jp.into(),
+        bjp_kk: bjp.into(),
+        sr: r.get::<i32, _>("sr").into(),
+        jiwa: r.get::<i32, _>("jiwa").into(),
+        unit_count: r.get::<i32, _>("unit_count").into(),
+        cakupan_persen: (target > 0).then(|| ((jp + bjp) as f64 / target as f64 * 10_000.0).round() / 100.0),
+        punya_pokmas: r.get("punya_pokmas"),
+        pokmas_konflik: r.get("pokmas_konflik"),
+    }
+}
+
+/// Sama dengan `DESA_SUMMARY_SQL`, ditambah geometri batas desa (kolom `geometry`).
+const DESA_SUMMARY_GEO_SQL: &str = "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, \
+    d.bjp_master + d.bjp_unit AS bjp_kk, d.sr, d.jiwa, d.unit_count, \
+    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik, \
+    ST_AsGeoJSON(b.geom)::text AS geometry \
+    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id";
+
+/// Desa dengan poligon batasnya (teks GeoJSON).
+#[derive(Debug, Clone)]
+pub struct DesaGeo {
+    pub summary: DesaSummary,
+    pub geometry: String,
 }
