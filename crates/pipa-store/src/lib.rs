@@ -92,9 +92,10 @@ impl Store {
     }
 
     /// Fitur jaringan dalam bbox, dengan filter jenis opsional. Fitur terhapus (soft delete) dilewati.
+    /// `network_id` None berarti semua jaringan (semua unit SPAM).
     pub async fn features_in_bbox(
         &self,
-        network_id: i64,
+        network_id: Option<i64>,
         bbox: Bbox,
         types: Option<&[FeatureType]>,
     ) -> Result<Vec<FeatureRow>, StoreError> {
@@ -105,7 +106,7 @@ impl Store {
             "SELECT id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, \
                     kondisi, status, fungsi, ST_AsGeoJSON(geom)::text AS geometry \
              FROM features \
-             WHERE network_id = $1 \
+             WHERE ($1::bigint IS NULL OR network_id = $1) \
                AND deleted_at IS NULL \
                AND geom && ST_MakeEnvelope($2, $3, $4, $5, 4326) \
                AND ($6::text[] IS NULL OR feature_type = ANY($6)) \

@@ -148,6 +148,24 @@ async fn network_geojson(
     Path(id): Path<i64>,
     Query(params): Query<GeoParams>,
 ) -> Result<Response, ApiError> {
+    features_geojson(&state, user, Some(id), params).await
+}
+
+/// Fitur dari semua unit SPAM dalam bbox. Pilihan unit dilakukan di klien.
+async fn all_geojson(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Query(params): Query<GeoParams>,
+) -> Result<Response, ApiError> {
+    features_geojson(&state, user, None, params).await
+}
+
+async fn features_geojson(
+    state: &AppState,
+    user: Option<CurrentUser>,
+    network_id: Option<i64>,
+    params: GeoParams,
+) -> Result<Response, ApiError> {
     let bbox = Bbox::parse(&params.bbox)?;
     // Tanpa `types`, hanya jenis publik yang dikembalikan. Data pelanggan harus diminta eksplisit.
     let types: Vec<FeatureType> = match parse_types(params.types.as_deref())? {
@@ -167,7 +185,7 @@ async fn network_geojson(
         ));
     }
 
-    let rows = state.store.features_in_bbox(id, bbox, Some(&types)).await?;
+    let rows = state.store.features_in_bbox(network_id, bbox, Some(&types)).await?;
     let features: Vec<Value> = rows
         .into_iter()
         .map(|f| {
@@ -554,6 +572,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/auth/me", get(me))
         .route("/api/v1/networks", get(list_networks))
         .route("/api/v1/networks/{id}/geojson", get(network_geojson))
+        .route("/api/v1/features/geojson", get(all_geojson))
         .route(
             "/api/v1/imports",
             post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),

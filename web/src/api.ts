@@ -39,12 +39,14 @@ export async function fetchNetworks(): Promise<Network[]> {
   return body.data
 }
 
-export async function fetchFeatures(networkId: number, bbox: Bbox, types: string[], signal?: AbortSignal) {
+/** Fitur dalam bbox. Tanpa `networkId`, fitur dari semua unit SPAM ikut diambil. */
+export async function fetchFeatures(networkId: number | null, bbox: Bbox, types: string[], signal?: AbortSignal) {
   const params = new URLSearchParams({
     bbox: [bbox.west, bbox.south, bbox.east, bbox.north].map((v) => v.toFixed(6)).join(','),
   })
   if (types.length) params.set('types', types.join(','))
-  const res = await fetch(`/api/v1/networks/${networkId}/geojson?${params}`, { signal })
+  const base = networkId === null ? '/api/v1/features/geojson' : `/api/v1/networks/${networkId}/geojson`
+  const res = await fetch(`${base}?${params}`, { signal })
   if (res.status === 403) throw new Error('Akses ke data ini butuh peran editor atau admin.')
   if (res.status === 422) throw new Error('Area terlalu banyak fitur. Perkecil area peta.')
   if (!res.ok) throw new Error(`Data fitur gagal dimuat (${res.status})`)

@@ -73,6 +73,7 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | GET | `/healthz` | Health check (ping database) |
 | GET | `/api/v1/networks` | Daftar jaringan |
 | GET | `/api/v1/networks/:id/geojson?bbox=w,s,e,n&types=pipa,valve` | FeatureCollection dalam bbox, maksimal 2° per sisi dan 50.000 fitur. Tanpa `types`, hanya jenis publik yang dikembalikan. |
+| GET | `/api/v1/features/geojson?bbox=w,s,e,n&types=pipa` | Fitur dari semua unit SPAM dalam bbox (peta menampilkan semua; pilihan unit menyaring di klien) |
 | POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
 | POST | `/api/v1/auth/logout` | Hapus cookie sesi |
 | POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr` | Unggah KML ke staging untuk satu unit SPAM (`network_id` wajib). Fitur diperiksa terhadap batas desa unit. (editor, admin) |

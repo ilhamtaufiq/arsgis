@@ -28,7 +28,8 @@ type MapState = {
   /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
   focus: PipeFeature | null
   importOpen: boolean
-  setNetwork: (id: number) => void
+  /** Unit SPAM yang dipilih untuk filter. Null berarti semua unit. */
+  setNetwork: (id: number | null) => void
   setBbox: (bbox: Bbox) => void
   select: (feature: PipeFeature | null) => void
   setFocus: (feature: PipeFeature | null) => void

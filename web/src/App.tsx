@@ -33,7 +33,6 @@ export function App() {
 
   // Peta dimulai tanpa unit. Jaringan (unit SPAM) dipilih pengguna; cakupan desa tampil tanpa pilihan.
   const units = (networks.data ?? []).filter((n) => n.unit_spam_id !== null)
-  const unitName = units.find((n) => n.id === networkId)?.nama
 
   // Sr hanya ikut diminta bila peran mengizinkan, supaya data pelanggan tidak dikirim ke pengunjung.
   const activeLayers: FeatureType[] = DEFAULT_LAYERS.filter((t) => customerAllowed || t !== 'sr')
@@ -41,10 +40,11 @@ export function App() {
   const requested: FeatureType[] = ['pipa', ...activeLayers]
   const typesKey = [...requested].sort().join(',')
 
+  // Semua unit diambil sekali per bbox; pilihan unit hanya menyaring di klien.
   const features = useQuery({
-    queryKey: ['features', networkId, typesKey, bboxKey(bbox), user?.role ?? 'anon'],
-    queryFn: ({ signal }) => fetchFeatures(networkId!, bbox!, typesKey.split(','), signal),
-    enabled: networkId !== null && bbox !== null && !me.isPending,
+    queryKey: ['features', typesKey, bboxKey(bbox), user?.role ?? 'anon'],
+    queryFn: ({ signal }) => fetchFeatures(null, bbox!, typesKey.split(','), signal),
+    enabled: bbox !== null && !me.isPending,
     placeholderData: (prev) => prev,
   })
 
@@ -52,9 +52,11 @@ export function App() {
   const visible = useMemo(
     () =>
       (features.data ?? []).filter(
-        (f) => f.properties.feature_type !== 'pipa' || pipeFunctions.includes(f.properties.fungsi ?? 'distribusi'),
+        (f) =>
+          (networkId === null || f.properties.network_id === networkId) &&
+          (f.properties.feature_type !== 'pipa' || pipeFunctions.includes(f.properties.fungsi ?? 'distribusi')),
       ),
-    [features.data, pipeFunctions],
+    [features.data, pipeFunctions, networkId],
   )
 
   const handleBbox = (b: Bbox) => setBbox(b)
@@ -78,11 +80,9 @@ export function App() {
                 className="network-select"
                 aria-label="Pilih unit SPAM"
                 value={networkId ?? ''}
-                onChange={(e) => setNetwork(Number(e.target.value))}
+                onChange={(e) => setNetwork(e.target.value === '' ? null : Number(e.target.value))}
               >
-                <option value="" disabled>
-                  Pilih unit SPAM…
-                </option>
+                <option value="">Semua unit SPAM</option>
                 {units.map((n) => (
                   <option key={n.id} value={n.id}>{n.nama}</option>
                 ))}
@@ -122,8 +122,7 @@ export function App() {
         <div className="notices">
           {networks.isError && <div className="banner">Gagal menghubungi server data.</div>}
           {features.isError && <div className="banner">{(features.error as Error).message}</div>}
-          {networkId === null && units.length > 0 && <div className="banner">Pilih unit SPAM untuk melihat jaringan pipa dan sambungan rumah.</div>}
-          {networkId !== null && features.isFetching && <div className="status">Memuat fitur {unitName ? `· ${unitName}` : ''}…</div>}
+          {features.isFetching && <div className="status">Memuat fitur…</div>}
         </div>
 
         {cakupanOpen && <Legend />}
