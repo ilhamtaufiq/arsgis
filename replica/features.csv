@@ -1,0 +1,44 @@
+feature,area,priority,original,clone,notes
+Interactive map with pan and zoom,map,must,yes,yes,already in arsgis (S02)
+Vector basemap,map,must,yes,no,use an open basemap not Google-style tiles
+Search a region by name grouped by level with parent and code,search,must,yes,no,S04 seen
+Region boundary tree (province to village),regions,must,yes,no,"S01 text: 38 prov, 541 kab/kota, 7432 kec, 84503 desa"
+Layer catalog with search,layers,must,yes,partial,"panel has search, filters, count and type badges; catalog still lists one layer"
+Layer catalog filters (category type sort),layers,must,yes,partial,"category and type filters built; no sort option"
+Layer type badges (Feature ArcGIS Vector),layers,should,yes,yes,"text badge per kind, colours from tokens"
+Toggle a layer on and off,layers,must,yes,partial,real GET /api/v1/catalog and table; only the SPM coverage layer is listed
+Active layers panel,layers,must,yes,partial,"slice: shows active layers with an off switch; one layer only"
+Quick layer chips on the top bar,layers,should,yes,partial,"row built from layer_catalog.chip (migration 0009); one chip"
+Legend for active layers,layers,must,yes,partial,already in arsgis for coverage only
+Coordinate grid with lat/long labels,map,should,yes,no,S02
+Zoom in and out buttons,map,must,yes,yes,already in arsgis
+GPS geolocation,map,should,yes,no,from welcome text
+Reverse geocode on click,map,could,yes,no,from welcome text
+Draw point line polygon rectangle circle,draw,must,yes,partial,"slice: rectangle only; geoman installed so the rest is small"
+Measure distance and area,draw,must,yes,no,S09 two tools seen; result display not seen
+Export drawings as GeoJSON,export,must,yes,yes,"slice: Unduh GeoJSON, tested by reading the file contents"
+Download region boundary as GeoJSON,export,should,yes,no,from welcome text
+Print map to PDF with legend coordinates and scale,export,must,yes,no,S11 button seen; PDF content not seen
+Export map as JPEG and GeoTIFF,export,should,yes,no,S11 buttons Simpan JPEG and Export TIF
+Welcome dialog with feature list,onboarding,could,yes,no,S01
+Disclaimer gate with recorded acceptance,onboarding,must,yes,no,S03 stored on the device
+Side panels can be minimised and closed,ux,should,yes,yes,"header with minimise and close; Esc closes; bottom sheet under 480px"
+Donation links,business,could,yes,no,only revenue seen
+Email and Google sign-in,accounts,should,yes,no,S08 needed for GeoTools only
+Import SHP GeoJSON GPX-KML KMZ files,data,should,yes,no,S07 in GeoData no login needed
+GPX animation and video export,geotools,could,yes,no,GeoTools behind login. From welcome text only
+Coordinate check and converter (DD DMS DMM UTM WGS84),tools,should,yes,no,S09 Cek Lokasi and Konverter Koordinat sections seen
+Geoprocessing toolbox (buffer clip intersect union merge dissolve statistics) with history,tools,should,yes,no,S09 about 24 tools in 6 groups; running progress and history tab seen
+GeoNusa Hub and the Geo* modules,modules,skip,yes,skip,out of scope slice
+AI Geospatial Analysis (Beta),modules,skip,yes,skip,no behaviour seen
+Satellite imagery with time slider,satellite,skip,yes,skip,other slice and needs provider agreements
+The 345-layer curated catalog data,content,skip,yes,skip,belongs to other agencies and the site
+Google-style basemap tiles,content,skip,yes,skip,licensed
+Export drawings as SHP,export,should,yes,no,S09c draw toolbar
+Import from table with X Y columns,data,could,yes,no,S07 row seen; form not opened
+Add ArcGIS REST service layer,data,should,yes,no,S07 row seen; form not opened
+Add GeoServer WFS layer,data,could,yes,no,S07 row seen; form not opened
+Import Google Maps Timeline,data,could,yes,no,S07 row seen
+Basemap switcher in the Alat panel,map,must,yes,no,S09 Basemap section
+Edit and delete drawn shapes,draw,must,yes,partial,"slice: delete all only; no per-shape edit yet"
+Active chip highlighting for layers that are on,layers,should,yes,yes,"pressed chip uses accent-soft with accent-strong text"

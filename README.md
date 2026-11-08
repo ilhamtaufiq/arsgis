@@ -76,7 +76,7 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | GET | `/api/v1/features/geojson?bbox=w,s,e,n&types=pipa` | Fitur dari semua unit SPAM dalam bbox (peta menampilkan semua; pilihan unit menyaring di klien) |
 | POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
 | POST | `/api/v1/auth/logout` | Hapus cookie sesi |
-| POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr` | Unggah KML ke staging untuk satu unit SPAM (`network_id` wajib). Fitur diperiksa terhadap batas desa unit. (editor, admin) |
+| POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr` | Unggah KML atau KMZ ke staging untuk satu unit SPAM (`network_id` wajib). KMZ dikenali dari isinya dan dibuka (`doc.kml`, maksimal 50 MB setelah dibuka). Fitur diperiksa terhadap batas desa unit. (editor, admin) |
 | GET | `/api/v1/imports/:id` | Laporan dan status batch impor (editor, admin) |
 | POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan fitur yang di dalam batas desa; fitur di luar dilewati. Sekali saja per batch (editor, admin) |
 | GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "arsgis-web",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--cwd", "web", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "arsgis-web-stub",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set API_PORT=8091&& bun run --cwd web dev --port 5174"],
+      "port": 5174
+    }
+  ]
+}

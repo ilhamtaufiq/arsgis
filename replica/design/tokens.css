@@ -1,0 +1,82 @@
+/* Dihasilkan dari replica/design/tokens.json. Ubah nilai di tokens.json, lalu sinkronkan ke sini.
+   Awalan --map- supaya tidak bentrok dengan variabel shadcn/Tailwind yang sudah ada di index.css dan styles.css. */
+
+:root {
+  --map-bg: #ffffff;
+  --map-page: #ebebeb;
+  --map-surface: #f6f7f9;
+  --map-border: #e3e6ea;
+  --map-border-input: #868e98;
+  --map-text: #1f2933;
+  --map-text-muted: #5b6470;
+  --map-accent: #df5e3a;
+  --map-accent-strong: #b8431f;
+  --map-on-accent: #ffffff;
+  --map-accent-soft: #fdeee8;
+  --map-danger: #f14444;
+  --map-danger-strong: #b91c1c;
+  --map-on-danger: #ffffff;
+  --map-success: #15803d;
+  --map-badge-feature-bg: #ede9fe;
+  --map-badge-feature-text: #5b21b6;
+  --map-badge-service-bg: #dbeafe;
+  --map-badge-service-text: #1e40af;
+  --map-badge-vector-bg: #ccfbf1;
+  --map-badge-vector-text: #115e59;
+
+  --map-float: rgba(255, 255, 255, 0.94);
+  --map-float-blur: 8px;
+
+  --map-font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --map-text-xs: 11px;   --map-leading-xs: 14px;
+  --map-text-sm: 13px;   --map-leading-sm: 18px;
+  --map-text-base: 14px; --map-leading-base: 20px;
+  --map-text-lg: 16px;   --map-leading-lg: 22px;
+  --map-text-xl: 20px;   --map-leading-xl: 26px;
+
+  --map-radius-sm: 6px;
+  --map-radius-md: 12px;
+  --map-radius-lg: 16px;
+  --map-radius-pill: 999px;
+
+  --map-shadow-float: 0 4px 18px rgba(15, 23, 42, 0.14);
+  --map-shadow-panel: 0 0 24px rgba(15, 23, 42, 0.18);
+
+  --map-fast: 120ms;
+  --map-base: 200ms;
+  --map-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Layout, diukur dari referensi dan dibulatkan ke skala 4 */
+  --map-edge: 12px;
+  --map-search-width: clamp(280px, 41vw, 420px);
+  --map-search-height: 36px;
+  --map-chip-height: 28px;
+  --map-round: 36px;
+  --map-panel-width: clamp(280px, 30vw, 360px);
+  --map-panel-header: 40px;
+}
+
+/* Pemetaan Tailwind v4: bg-map-surface, text-map-muted, border-map-border, rounded-map-lg, dst. */
+@theme inline {
+  --color-map-bg: var(--map-bg);
+  --color-map-page: var(--map-page);
+  --color-map-surface: var(--map-surface);
+  --color-map-border: var(--map-border);
+  --color-map-border-input: var(--map-border-input);
+  --color-map-text: var(--map-text);
+  --color-map-muted: var(--map-text-muted);
+  --color-map-accent: var(--map-accent);
+  --color-map-accent-strong: var(--map-accent-strong);
+  --color-map-on-accent: var(--map-on-accent);
+  --color-map-accent-soft: var(--map-accent-soft);
+  --color-map-danger: var(--map-danger);
+  --color-map-danger-strong: var(--map-danger-strong);
+  --color-map-on-danger: var(--map-on-danger);
+  --color-map-success: var(--map-success);
+  --radius-map-sm: var(--map-radius-sm);
+  --radius-map-md: var(--map-radius-md);
+  --radius-map-lg: var(--map-radius-lg);
+  --shadow-map-float: var(--map-shadow-float);
+  --shadow-map-panel: var(--map-shadow-panel);
+}
