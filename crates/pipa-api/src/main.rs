@@ -22,7 +22,9 @@ use axum::{
     Json, Router,
 };
 use pipa_core::{can_read_types, parse_types, Bbox, CoreError, FeatureType, Role};
-use pipa_store::{CatalogInput, CatalogPatch, CommitOutcome, Store, StoreError, StagingRow};
+use pipa_store::{
+    CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput, Store, StoreError, StagingRow,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
@@ -573,19 +575,74 @@ async fn desa_detail(
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
     let customer = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
-    let mut detail = state
-        .store
-        .desa_detail(id)
-        .await?
-        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "desa tidak ditemukan".into()))?;
+    let mut detail = state.store.desa_detail(id).await?.ok_or_else(desa_tidak_ditemukan)?;
     if !customer {
-        if let Some(p) = detail.pokmas.as_mut() {
-            p.kepala = None;
-            p.bendahara = None;
-            p.sekretaris = None;
-        }
+        sembunyikan_pengurus(&mut detail.pokmas);
     }
     Ok(Json(json!({ "data": detail })))
+}
+
+fn desa_tidak_ditemukan() -> ApiError {
+    ApiError(StatusCode::NOT_FOUND, "desa tidak ditemukan".into())
+}
+
+fn sembunyikan_pengurus(pokmas: &mut Option<PokmasDesa>) {
+    if let Some(p) = pokmas.as_mut() {
+        p.kepala = None;
+        p.bendahara = None;
+        p.sekretaris = None;
+    }
+}
+
+/// Pokmas efektif satu desa. Publik untuk nama dan perdes; nama pengurus dan catatan koreksi hanya untuk editor dan admin.
+async fn desa_pokmas(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    let editor = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let detail = state.store.pokmas_detail(id).await?.ok_or_else(desa_tidak_ditemukan)?;
+    let mut pokmas = detail.efektif.pokmas;
+    let koreksi = if editor {
+        detail.koreksi.map(|k| {
+            json!({ "catatan": k.catatan, "diperbarui_oleh": k.diperbarui_oleh, "diperbarui_pada": k.diperbarui_pada })
+        })
+    } else {
+        sembunyikan_pengurus(&mut pokmas);
+        None
+    };
+    Ok(Json(json!({
+        "data": { "sumber": detail.efektif.sumber, "pokmas": pokmas, "koreksi": koreksi }
+    })))
+}
+
+/// Ganti Pokmas satu desa dengan isian dari arsgis. Data Arumanis tidak diubah.
+async fn simpan_desa_pokmas(
+    State(state): State<AppState>,
+    Editor(me): Editor,
+    Path(id): Path<i64>,
+    Json(body): Json<PokmasInput>,
+) -> Result<Json<Value>, ApiError> {
+    let isian = body.validated().map_err(|m| bad_request(&m))?;
+    if !state.store.simpan_pokmas_koreksi(id, &isian, &me.username).await? {
+        return Err(desa_tidak_ditemukan());
+    }
+    tracing::info!(user = %me.username, desa = id, "pokmas desa diubah");
+    Ok(Json(json!({ "id": id, "ok": true })))
+}
+
+/// Kembalikan Pokmas satu desa ke data Arumanis dengan menghapus koreksinya.
+async fn hapus_desa_pokmas(
+    State(state): State<AppState>,
+    Editor(me): Editor,
+    Path(id): Path<i64>,
+) -> Result<Response, ApiError> {
+    if !state.store.desa_aktif(id).await? {
+        return Err(desa_tidak_ditemukan());
+    }
+    state.store.hapus_pokmas_koreksi(id).await?;
+    tracing::info!(user = %me.username, desa = id, "pokmas desa dikembalikan ke data arumanis");
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Poligon desa dengan capaian SPM, untuk peta cakupan. Publik; nama pengurus tidak ikut.
@@ -676,6 +733,10 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/desa", get(list_desa))
         .route("/api/v1/desa/geojson", get(desa_geojson))
         .route("/api/v1/desa/{id}", get(desa_detail))
+        .route(
+            "/api/v1/desa/{id}/pokmas",
+            get(desa_pokmas).put(simpan_desa_pokmas).delete(hapus_desa_pokmas),
+        )
         .route("/api/v1/dashboard/kelengkapan", get(kelengkapan))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
