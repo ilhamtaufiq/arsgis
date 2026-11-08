@@ -11,6 +11,7 @@ const LoginPage = lazy(() => import('./LoginPage').then((m) => ({ default: m.Log
 const MapPage = lazy(() => import('./App').then((m) => ({ default: m.App })))
 const DashboardPage = lazy(() => import('./Dashboard').then((m) => ({ default: m.DashboardPage })))
 const AdminPage = lazy(() => import('./Admin').then((m) => ({ default: m.AdminPage })))
+const DesaDetailPage = lazy(() => import('./DesaDetailPage').then((m) => ({ default: m.DesaDetailPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
@@ -33,6 +34,8 @@ createRoot(document.getElementById('root')!).render(
           <LoginGate judul="Dashboard">
             <DashboardPage />
           </LoginGate>
+        ) : /^\/desa\/\d+$/.test(path) ? (
+          <DesaDetailPage id={Number(path.split('/')[2])} />
         ) : path === '/admin' ? (
           <LoginGate judul="Admin">
             <AdminPage />

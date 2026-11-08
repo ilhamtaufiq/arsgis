@@ -566,6 +566,28 @@ async fn list_desa(State(state): State<AppState>) -> Result<Json<Value>, ApiErro
     Ok(Json(json!({ "data": desa })))
 }
 
+/// Detail satu desa. Publik untuk data umum; nama pengurus Pokmas hanya untuk editor dan admin.
+async fn desa_detail(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    let customer = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let mut detail = state
+        .store
+        .desa_detail(id)
+        .await?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "desa tidak ditemukan".into()))?;
+    if !customer {
+        if let Some(p) = detail.pokmas.as_mut() {
+            p.kepala = None;
+            p.bendahara = None;
+            p.sekretaris = None;
+        }
+    }
+    Ok(Json(json!({ "data": detail })))
+}
+
 /// Poligon desa dengan capaian SPM, untuk peta cakupan. Publik; nama pengurus tidak ikut.
 async fn desa_geojson(State(state): State<AppState>) -> Result<Response, ApiError> {
     let rows = state.store.desa_geo().await?;
@@ -653,6 +675,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/admin/sync-runs", get(admin_sync_runs))
         .route("/api/v1/desa", get(list_desa))
         .route("/api/v1/desa/geojson", get(desa_geojson))
+        .route("/api/v1/desa/{id}", get(desa_detail))
         .route("/api/v1/dashboard/kelengkapan", get(kelengkapan))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))

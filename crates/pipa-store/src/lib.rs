@@ -1000,6 +1000,59 @@ impl Store {
         .rows_affected())
     }
 
+    /// Detail satu desa: ringkasan, unit SPAM di desa itu, dan Pokmas (dengan nama pengurus).
+    /// Pemanggil yang tidak berhak menyembunyikan nama pengurus sebelum dikirim.
+    pub async fn desa_detail(&self, id: i64) -> Result<Option<DesaDetail>, StoreError> {
+        let Some(row) = sqlx::query(&format!("{DESA_SUMMARY_SQL} WHERE d.id = $1 AND d.aktif"))
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let summary = desa_summary_from_row(&row);
+
+        let units = sqlx::query(
+            "SELECT id, nama, sistem_layanan, sumber_dana, is_simspam, sr, kk, jiwa, bjp_kk \
+             FROM ref_unit_spam WHERE desa_id = $1 AND aktif ORDER BY id",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(|r| UnitDesa {
+            id: r.get("id"),
+            nama: r.get("nama"),
+            sistem_layanan: r.get("sistem_layanan"),
+            sumber_dana: r.get("sumber_dana"),
+            is_simspam: r.get("is_simspam"),
+            sr: r.get::<i32, _>("sr").into(),
+            kk: r.get::<i32, _>("kk").into(),
+            jiwa: r.get::<i32, _>("jiwa").into(),
+            bjp_kk: r.get::<i32, _>("bjp_kk").into(),
+        })
+        .collect();
+
+        let pokmas = sqlx::query(
+            "SELECT nama, perdes, konflik, kepala, bendahara, sekretaris, sumber_unit_ids \
+             FROM ref_pokmas WHERE desa_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|r| PokmasDesa {
+            nama: r.get("nama"),
+            perdes: r.get("perdes"),
+            konflik: r.get("konflik"),
+            kepala: r.get("kepala"),
+            bendahara: r.get("bendahara"),
+            sekretaris: r.get("sekretaris"),
+            sumber_unit_ids: r.get("sumber_unit_ids"),
+        });
+
+        Ok(Some(DesaDetail { summary, units, pokmas }))
+    }
+
     /// Daftar desa aktif dengan capaian SPM. Tidak memuat nama pengurus Pokmas.
     pub async fn list_desa(&self) -> Result<Vec<DesaSummary>, StoreError> {
         let rows = sqlx::query(&format!("{DESA_SUMMARY_SQL} WHERE d.aktif ORDER BY d.kecamatan, d.nama"))
@@ -1285,4 +1338,41 @@ mod catalog_tests {
         assert!(store.delete_catalog(id).await.unwrap());
         assert!(!store.delete_catalog(id).await.unwrap());
     }
+}
+
+/// Unit SPAM yang melayani satu desa.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UnitDesa {
+    pub id: i64,
+    pub nama: Option<String>,
+    pub sistem_layanan: Option<String>,
+    pub sumber_dana: Option<String>,
+    pub is_simspam: bool,
+    pub sr: i64,
+    pub kk: i64,
+    pub jiwa: i64,
+    pub bjp_kk: i64,
+}
+
+/// Pokmas satu desa. Nama pengurus (`kepala`, `bendahara`, `sekretaris`) hanya diisi untuk pengguna berhak.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PokmasDesa {
+    pub nama: Option<String>,
+    pub perdes: Option<String>,
+    pub konflik: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kepala: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bendahara: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sekretaris: Option<String>,
+    pub sumber_unit_ids: Vec<i64>,
+}
+
+/// Detail desa untuk halaman detail: ringkasan, unit SPAM, dan Pokmas.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DesaDetail {
+    pub summary: DesaSummary,
+    pub units: Vec<UnitDesa>,
+    pub pokmas: Option<PokmasDesa>,
 }

@@ -81,6 +81,7 @@ export function DesaInfo({ desa, onClose }: { desa: DesaProps; onClose: () => vo
           </div>
         ))}
       </dl>
+      <a href={`/desa/${desa.id}`} className="info-link">Buka detail desa →</a>
     </aside>
   )
 }
