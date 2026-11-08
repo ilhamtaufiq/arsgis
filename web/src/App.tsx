@@ -12,6 +12,9 @@ import { SearchBox } from './Search'
 import { DEFAULT_LAYERS, DEFAULT_PIPE_FUNCTIONS, useMapStore } from './store'
 import type { Bbox, FeatureType } from './types'
 
+/** Sama dengan `Bbox::MAX_SPAN_DEG` di backend (pipa-core). */
+const MAX_BBOX_DEG = 2
+
 export function App() {
   const networkId = useMapStore((s) => s.networkId)
   const bbox = useMapStore((s) => s.bbox)
@@ -40,11 +43,15 @@ export function App() {
   const requested: FeatureType[] = ['pipa', ...activeLayers]
   const typesKey = [...requested].sort().join(',')
 
+  // Backend menolak bbox yang lebar lebih dari MAX_BBOX_DEG (400). Saat peta di-zoom out sejauh itu, fitur tidak diminta.
+  const bboxTerlaluLebar =
+    bbox !== null && (bbox.east - bbox.west > MAX_BBOX_DEG || bbox.north - bbox.south > MAX_BBOX_DEG)
+
   // Semua unit diambil sekali per bbox; pilihan unit hanya menyaring di klien.
   const features = useQuery({
     queryKey: ['features', typesKey, bboxKey(bbox), user?.role ?? 'anon'],
     queryFn: ({ signal }) => fetchFeatures(null, bbox!, typesKey.split(','), signal),
-    enabled: bbox !== null && !me.isPending,
+    enabled: bbox !== null && !me.isPending && !bboxTerlaluLebar,
     placeholderData: (prev) => prev,
   })
 
@@ -121,6 +128,25 @@ export function App() {
 
         <ToolPanel />
         {cakupanOpen && <Legend />}
+        {bboxTerlaluLebar && (
+          <div
+            role="status"
+            style={{
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1000,
+              background: '#fff',
+              padding: '6px 12px',
+              borderRadius: 8,
+              boxShadow: '0 1px 4px rgba(0,0,0,.2)',
+              fontSize: 13,
+            }}
+          >
+            Perbesar peta untuk melihat pipa dan titik.
+          </div>
+        )}
         {desaSelected ? (
           <DesaInfo desa={desaSelected} onClose={() => selectDesa(null)} />
         ) : (
