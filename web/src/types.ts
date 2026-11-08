@@ -1,6 +1,17 @@
 import type { Feature, Geometry } from 'geojson'
 
-export type FeatureType = 'pipa' | 'valve' | 'reservoir' | 'sr' | 'bronkaptering'
+export type FeatureType =
+  | 'pipa'
+  | 'valve'
+  | 'reservoir'
+  | 'sr'
+  | 'bronkaptering'
+  | 'bak_penahan_tekanan'
+  | 'menara_air'
+  | 'hidran_umum'
+  | 'intake'
+  | 'pompa'
+  | 'meter_induk'
 
 export type Network = {
   id: number
@@ -22,6 +33,12 @@ export type FeatureProperties = {
   kondisi: string | null
   status: string
   fungsi: PipeFunction | null
+  // Atribut tambahan dari migrasi 0010. Opsional agar respons lama tetap valid.
+  kapasitas_m3?: number | null
+  debit_lps?: number | null
+  elevasi_m?: number | null
+  tahun_bangun?: number | null
+  sumber_dana?: string | null
 }
 
 export type PipeFeature = Feature<Geometry, FeatureProperties> & { id: number }

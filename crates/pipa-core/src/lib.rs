@@ -12,26 +12,45 @@ pub enum CoreError {
     InvalidBbox(String),
     #[error("peran tidak dikenal: {0}")]
     UnknownRole(String),
+    #[error("material tidak dikenal: {0}")]
+    UnknownMaterial(String),
+    #[error("kondisi tidak dikenal: {0}")]
+    UnknownKondisi(String),
 }
 
-/// Jenis fitur jaringan. Nilainya disimpan sebagai teks di kolom `features.feature_type`.
+/// Jenis aset jaringan. Nilainya disimpan sebagai teks di kolom `features.feature_type`.
+/// Nama teks harus sama dengan `as_str` dan dengan CHECK di migrasi 0010.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FeatureType {
     Pipa,
     Valve,
     Reservoir,
     Sr,
     Bronkaptering,
+    /// Bak penahan tekanan (BPT).
+    BakPenahanTekanan,
+    MenaraAir,
+    HidranUmum,
+    /// Sumur atau mata air.
+    Intake,
+    Pompa,
+    MeterInduk,
 }
 
 impl FeatureType {
-    pub const ALL: [FeatureType; 5] = [
+    pub const ALL: [FeatureType; 11] = [
         FeatureType::Pipa,
         FeatureType::Valve,
         FeatureType::Reservoir,
         FeatureType::Sr,
         FeatureType::Bronkaptering,
+        FeatureType::BakPenahanTekanan,
+        FeatureType::MenaraAir,
+        FeatureType::HidranUmum,
+        FeatureType::Intake,
+        FeatureType::Pompa,
+        FeatureType::MeterInduk,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -41,6 +60,12 @@ impl FeatureType {
             FeatureType::Reservoir => "reservoir",
             FeatureType::Sr => "sr",
             FeatureType::Bronkaptering => "bronkaptering",
+            FeatureType::BakPenahanTekanan => "bak_penahan_tekanan",
+            FeatureType::MenaraAir => "menara_air",
+            FeatureType::HidranUmum => "hidran_umum",
+            FeatureType::Intake => "intake",
+            FeatureType::Pompa => "pompa",
+            FeatureType::MeterInduk => "meter_induk",
         }
     }
 
@@ -54,6 +79,81 @@ impl FeatureType {
     /// Jenis yang termasuk data pelanggan. Hanya boleh dibaca oleh peran internal.
     pub fn is_customer_data(self) -> bool {
         matches!(self, FeatureType::Sr)
+    }
+}
+
+/// Material pipa dan aset lain. Nilai sama dengan CHECK `features.material` di migrasi 0010.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Material {
+    Pvc,
+    Hdpe,
+    Gip,
+    Dci,
+    Steel,
+    Acp,
+    Lainnya,
+}
+
+impl Material {
+    pub const ALL: [Material; 7] = [
+        Material::Pvc,
+        Material::Hdpe,
+        Material::Gip,
+        Material::Dci,
+        Material::Steel,
+        Material::Acp,
+        Material::Lainnya,
+    ];
+
+    /// Ejaan resmi yang disimpan di database. Huruf besar-kecil dibedakan.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Material::Pvc => "PVC",
+            Material::Hdpe => "HDPE",
+            Material::Gip => "GIP",
+            Material::Dci => "DCI",
+            Material::Steel => "Steel",
+            Material::Acp => "ACP",
+            Material::Lainnya => "Lainnya",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self, CoreError> {
+        Self::ALL
+            .into_iter()
+            .find(|m| m.as_str() == s)
+            .ok_or_else(|| CoreError::UnknownMaterial(s.to_string()))
+    }
+}
+
+/// Kondisi fisik aset. Data lama boleh berisi teks bebas (mis. `perlu cek`). Validasi ini hanya dipakai
+/// untuk nilai yang ditulis setelah migrasi 0010, sesuai pemicu di database.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Kondisi {
+    Baik,
+    RusakRingan,
+    RusakBerat,
+    TidakBerfungsi,
+}
+
+impl Kondisi {
+    pub const ALL: [Kondisi; 4] = [Kondisi::Baik, Kondisi::RusakRingan, Kondisi::RusakBerat, Kondisi::TidakBerfungsi];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kondisi::Baik => "baik",
+            Kondisi::RusakRingan => "rusak_ringan",
+            Kondisi::RusakBerat => "rusak_berat",
+            Kondisi::TidakBerfungsi => "tidak_berfungsi",
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self, CoreError> {
+        Self::ALL
+            .into_iter()
+            .find(|k| k.as_str() == s)
+            .ok_or_else(|| CoreError::UnknownKondisi(s.to_string()))
     }
 }
 
@@ -174,9 +274,55 @@ mod tests {
     }
 
     #[test]
+    fn new_feature_types_roundtrip_and_serde_match_as_str() {
+        for t in [
+            FeatureType::BakPenahanTekanan,
+            FeatureType::MenaraAir,
+            FeatureType::HidranUmum,
+            FeatureType::Intake,
+            FeatureType::Pompa,
+            FeatureType::MeterInduk,
+        ] {
+            assert_eq!(FeatureType::parse(t.as_str()).unwrap(), t);
+            // Serde harus memakai nama teks yang sama dengan database dan API.
+            let json = serde_json::to_string(&t).unwrap();
+            assert_eq!(json, format!("\"{}\"", t.as_str()));
+        }
+        assert_eq!(FeatureType::parse("bak_penahan_tekanan").unwrap(), FeatureType::BakPenahanTekanan);
+        assert!(FeatureType::parse("BPT").is_err());
+        assert!(FeatureType::parse("sumur").is_err());
+        assert_eq!(FeatureType::ALL.len(), 11);
+    }
+
+    #[test]
     fn only_sr_is_customer_data() {
-        assert!(FeatureType::Sr.is_customer_data());
-        assert!(!FeatureType::Pipa.is_customer_data());
+        for t in FeatureType::ALL {
+            assert_eq!(t.is_customer_data(), t == FeatureType::Sr, "{t:?}");
+        }
+    }
+
+    #[test]
+    fn material_validation() {
+        for m in Material::ALL {
+            assert_eq!(Material::parse(m.as_str()).unwrap(), m);
+        }
+        assert_eq!(Material::parse("Steel").unwrap(), Material::Steel);
+        assert_eq!(Material::parse("ACP").unwrap(), Material::Acp);
+        // Huruf besar-kecil dibedakan, sama dengan CHECK di database.
+        assert!(Material::parse("steel").is_err());
+        assert!(Material::parse("besi").is_err());
+        assert!(Material::parse("").is_err());
+    }
+
+    #[test]
+    fn kondisi_validation() {
+        for k in Kondisi::ALL {
+            assert_eq!(Kondisi::parse(k.as_str()).unwrap(), k);
+        }
+        assert_eq!(Kondisi::parse("rusak_berat").unwrap(), Kondisi::RusakBerat);
+        // Teks bebas lama tidak lolos untuk penulisan baru.
+        assert!(Kondisi::parse("perlu cek").is_err());
+        assert!(Kondisi::parse("Baik").is_err());
     }
 
     #[test]

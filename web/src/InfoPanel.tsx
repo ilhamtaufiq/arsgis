@@ -1,4 +1,5 @@
 import type { DesaProps } from './cakupanApi'
+import { ASET_LABEL } from './asetStyle'
 import type { PipeFeature } from './types'
 
 const LABEL: Record<string, string> = {
@@ -7,6 +8,7 @@ const LABEL: Record<string, string> = {
   reservoir: 'Reservoir',
   sr: 'Sambungan rumah',
   bronkaptering: 'Bronkaptering',
+  ...ASET_LABEL,
 }
 
 type Props = { feature: PipeFeature | null; onClose: () => void }

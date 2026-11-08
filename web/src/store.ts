@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import type { Bbox, FeatureType, PipeFeature, PipeFunction } from './types'
 import type { DesaProps } from './cakupanApi'
+import { ASET_LABEL } from './asetStyle'
 
 export const LAYER_LABELS: Record<Exclude<FeatureType, 'pipa'>, string> = {
   valve: 'Valve',
   reservoir: 'Reservoir',
   sr: 'Sambungan rumah',
   bronkaptering: 'Bronkaptering',
+  ...ASET_LABEL,
 }
 
 export const PIPE_LABELS: Record<PipeFunction, string> = {

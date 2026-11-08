@@ -11,6 +11,7 @@ import { SectionCards } from '@/components/section-cards'
 import { SiteHeader } from '@/components/site-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { ASET_COLOR, ASET_LABEL } from '@/asetStyle'
 
 // Label dan warna jenis fitur, sama dengan warna di peta.
 const JENIS: Record<string, { label: string; color: string }> = {
@@ -19,6 +20,9 @@ const JENIS: Record<string, { label: string; color: string }> = {
   reservoir: { label: 'Reservoir', color: '#0f766e' },
   sr: { label: 'Sambungan rumah', color: '#a16207' },
   bronkaptering: { label: 'Bronkaptering', color: '#0891b2' },
+  ...Object.fromEntries(
+    Object.entries(ASET_LABEL).map(([k, label]) => [k, { label, color: ASET_COLOR[k as keyof typeof ASET_COLOR] }]),
+  ),
 }
 
 // Unit dibaca dari query string, misalnya /dashboard?unit=3. Tanpa parameter, statistik semua unit.

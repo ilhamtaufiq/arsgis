@@ -114,6 +114,11 @@ pub struct FeatureRow {
     pub kondisi: Option<String>,
     pub status: String,
     pub fungsi: Option<String>,
+    pub kapasitas_m3: Option<f64>,
+    pub debit_lps: Option<f64>,
+    pub elevasi_m: Option<f64>,
+    pub tahun_bangun: Option<i16>,
+    pub sumber_dana: Option<String>,
     pub geometry: serde_json::Value,
 }
 
@@ -263,7 +268,10 @@ impl Store {
 
         let rows = sqlx::query(
             "SELECT id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, \
-                    kondisi, status, fungsi, ST_AsGeoJSON(geom)::text AS geometry \
+                    kondisi, status, fungsi, \
+                    kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
+                    elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, \
+                    ST_AsGeoJSON(geom)::text AS geometry \
              FROM features \
              WHERE ($1::bigint IS NULL OR network_id = $1) \
                AND deleted_at IS NULL \
@@ -304,6 +312,11 @@ fn feature_from_row(r: &PgRow) -> Result<FeatureRow, StoreError> {
         kondisi: r.try_get("kondisi")?,
         status: r.try_get("status")?,
         fungsi: r.try_get("fungsi")?,
+        kapasitas_m3: r.try_get("kapasitas_m3")?,
+        debit_lps: r.try_get("debit_lps")?,
+        elevasi_m: r.try_get("elevasi_m")?,
+        tahun_bangun: r.try_get("tahun_bangun")?,
+        sumber_dana: r.try_get("sumber_dana")?,
         geometry,
     })
 }

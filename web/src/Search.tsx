@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from 'react'
 import { useMapStore } from './store'
+import { ASET_COLOR, ASET_LABEL } from './asetStyle'
 import type { PipeFeature } from './types'
 
 const LABEL: Record<string, string> = {
@@ -8,6 +9,7 @@ const LABEL: Record<string, string> = {
   reservoir: 'Reservoir',
   sr: 'Sambungan rumah',
   bronkaptering: 'Bronkaptering',
+  ...ASET_LABEL,
 }
 
 const COLOR: Record<string, string> = {
@@ -16,6 +18,7 @@ const COLOR: Record<string, string> = {
   reservoir: '#0f766e',
   sr: '#a16207',
   bronkaptering: '#0891b2',
+  ...ASET_COLOR,
 }
 
 type Props = {

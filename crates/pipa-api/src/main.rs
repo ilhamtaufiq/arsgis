@@ -220,6 +220,11 @@ async fn features_geojson(
                     "kondisi": f.kondisi,
                     "status": f.status,
                     "fungsi": f.fungsi,
+                    "kapasitas_m3": f.kapasitas_m3,
+                    "debit_lps": f.debit_lps,
+                    "elevasi_m": f.elevasi_m,
+                    "tahun_bangun": f.tahun_bangun,
+                    "sumber_dana": f.sumber_dana,
                 },
             })
         })

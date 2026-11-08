@@ -4,6 +4,7 @@ import type { FeatureCollection } from 'geojson'
 import 'leaflet/dist/leaflet.css'
 import { leafletLayer } from 'protomaps-leaflet'
 import { cakupanColor, type DesaGeo, type DesaProps } from './cakupanApi'
+import { ASET_COLOR } from './asetStyle'
 import { attachDrawing } from './drawing'
 import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
@@ -42,6 +43,19 @@ function pointStyle(type: string): L.CircleMarkerOptions {
       return { radius: 10, color: '#ffffff', weight: 2, fillColor: '#0f766e', fillOpacity: 1 }
     case 'bronkaptering':
       return { radius: 9, color: '#ffffff', weight: 2, fillColor: '#0891b2', fillOpacity: 1 }
+    // Aset baru. Leaflet hanya punya circleMarker, jadi jenis dibedakan lewat warna dan ukuran.
+    case 'bak_penahan_tekanan':
+      return { radius: 8, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.bak_penahan_tekanan, fillOpacity: 1 }
+    case 'menara_air':
+      return { radius: 9, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.menara_air, fillOpacity: 1 }
+    case 'hidran_umum':
+      return { radius: 5, color: '#ffffff', weight: 1.5, fillColor: ASET_COLOR.hidran_umum, fillOpacity: 1 }
+    case 'intake':
+      return { radius: 10, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.intake, fillOpacity: 1 }
+    case 'pompa':
+      return { radius: 7, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.pompa, fillOpacity: 1 }
+    case 'meter_induk':
+      return { radius: 6, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.meter_induk, fillOpacity: 1 }
     default:
       // Sambungan rumah (sr)
       return { radius: 4, stroke: false, fillColor: '#a16207', fillOpacity: 1 }
