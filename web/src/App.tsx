@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
-import { ImportPanel } from './Import'
 import { DesaInfo, InfoPanel } from './InfoPanel'
 import { fetchDesaGeo } from './cakupanApi'
 import { Legend } from './Legend'
@@ -17,7 +16,6 @@ export function App() {
   const networkId = useMapStore((s) => s.networkId)
   const bbox = useMapStore((s) => s.bbox)
   const selected = useMapStore((s) => s.selected)
-  const importOpen = useMapStore((s) => s.importOpen)
   const panel = useMapStore((s) => s.panel)
   const cakupanOpen = useMapStore((s) => s.cakupanOpen)
   const desaSelected = useMapStore((s) => s.desaSelected)
@@ -26,7 +24,6 @@ export function App() {
   const setNetwork = useMapStore((s) => s.setNetwork)
   const setBbox = useMapStore((s) => s.setBbox)
   const select = useMapStore((s) => s.select)
-  const toggleImport = useMapStore((s) => s.toggleImport)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
@@ -100,7 +97,6 @@ export function App() {
 
         <div className="float-right">
           <AuthPanel user={user} />
-          {customerAllowed && <ImportPanel networkId={networkId} open={importOpen} onClose={toggleImport} />}
         </div>
 
         <div className="toolbar">
@@ -115,13 +111,6 @@ export function App() {
               <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </a>
-          {customerAllowed && (
-            <button type="button" className="round" aria-label="Impor KML" aria-pressed={importOpen} onClick={toggleImport}>
-              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                <path d="M4 20l4-1 11-11-3-3L5 16l-1 4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
         </div>
 
         <div className="notices">

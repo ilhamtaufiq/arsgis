@@ -27,7 +27,6 @@ type MapState = {
   cakupanOpen: boolean
   /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
   focus: PipeFeature | null
-  importOpen: boolean
   /** Panel kiri yang terbuka: daftar layer, alat gambar, atau tidak ada. */
   panel: 'layer' | 'alat' | null
   /** Alat gambar yang sedang menunggu klik di peta. */
@@ -44,7 +43,6 @@ type MapState = {
   setFocus: (feature: PipeFeature | null) => void
   selectDesa: (desa: DesaProps | null) => void
   toggleCakupan: () => void
-  toggleImport: () => void
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -54,7 +52,6 @@ export const useMapStore = create<MapState>((set) => ({
   desaSelected: null,
   cakupanOpen: true,
   focus: null,
-  importOpen: false,
   panel: null,
   drawMode: null,
   drawnCount: 0,
@@ -67,5 +64,4 @@ export const useMapStore = create<MapState>((set) => ({
   setFocus: (feature) => set({ focus: feature }),
   selectDesa: (desa) => set({ desaSelected: desa, selected: null }),
   toggleCakupan: () => set((s) => ({ cakupanOpen: !s.cakupanOpen })),
-  toggleImport: () => set((s) => ({ importOpen: !s.importOpen })),
 }))
