@@ -101,7 +101,7 @@ Data desa, capaian, unit SPAM, dan Pokmas berasal dari Arumanis dan disimpan seb
 arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
 
 - Desa dan capaian per desa: `GET /api/public/spam-units/map-stats` Arumanis (publik).
-- Unit SPAM, pengelola, dan capaian per unit: `GET /api/spam-units` Arumanis (butuh `ARUMANIS_TOKEN`).
+- Unit SPAM, pengelola, dan capaian per unit: `GET /api/public/v1/spam-units` Arumanis dengan kunci API `ARUMANIS_API_KEY` (disarankan, tidak kedaluwarsa), atau `GET /api/spam-units` dengan `ARUMANIS_TOKEN` (cadangan, kedaluwarsa dalam 12 jam secara bawaan). Kunci dibuat di server apiamis: `apiamis-api create-api-key --name=arsgis --scopes=spam-units:read,peripaan:read`.
 - Pokmas: satu per desa, diturunkan dari pengelola unit dengan id terkecil. Bila unit-unit di satu desa mencatat nama berbeda, `konflik` bernilai true.
 - Batas desa: `data/batas-desa-cianjur.geojson` (HDX-BPS 2020, 360 desa). Desa dicocokkan lewat nama kecamatan + desa; koreksi manual di tabel `ref_desa_kode_override`.
 - Setiap unit SPAM punya satu baris di `networks` (`unit_spam_id`, `desa_id`), dibuat dan diperbarui saat sinkron. Impor dan peta memakai baris ini sebagai jaringan.
@@ -118,7 +118,8 @@ arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
 | `WEB_DIST` | tidak | Default `web/dist` |
 | `BASEMAP_DIR` | tidak | Default `data` |
 | `ARUMANIS_API_URL` | tidak | Default `https://apiamis.cianjur.space/api` |
-| `ARUMANIS_TOKEN` | tidak | Token akun Arumanis baca saja, untuk unit SPAM dan Pokmas |
+| `ARUMANIS_API_KEY` | tidak | Kunci API layanan dari apiamis, untuk unit SPAM dan Pokmas. Disarankan; menang atas `ARUMANIS_TOKEN` |
+| `ARUMANIS_TOKEN` | tidak | Cadangan: token akun Arumanis baca saja. Kedaluwarsa (default 12 jam) |
 | `ARUMANIS_SYNC_MENIT` | tidak | Jeda sinkron otomatis, default 60; 0 mematikan |
 | `COOKIE_SECURE` | tidak | Set `true` di produksi (HTTPS) |
 | `ADMIN_USERNAME` | tidak | Username admin awal, default `admin` |
@@ -140,7 +141,8 @@ arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
    | `JWT_SECRET` | ya | `openssl rand -hex 32` |
    | `ADMIN_PASSWORD` | ya | Minimal 10 karakter. Admin awal dibuat saat pertama jalan |
    | `ADMIN_USERNAME` | tidak | Default `admin` |
-   | `ARUMANIS_TOKEN` | tidak | Akun baca saja. Tanpa ini, unit SPAM dan Pokmas tidak ikut disinkron |
+   | `ARUMANIS_API_KEY` | tidak | Kunci API dari apiamis (`apiamis-api create-api-key`). Tanpa ini dan tanpa token, unit SPAM dan Pokmas tidak ikut disinkron |
+   | `ARUMANIS_TOKEN` | tidak | Cadangan bila tidak ada kunci API. Token kedaluwarsa, jadi tidak cocok untuk produksi |
    | `ARUMANIS_SYNC_MENIT` | tidak | Default 60 |
    | `COOKIE_SECURE` | tidak | Default `true`. Aplikasi harus diakses lewat HTTPS, kalau tidak sesi login tidak tersimpan |
 

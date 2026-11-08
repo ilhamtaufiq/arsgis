@@ -221,11 +221,29 @@ pub fn parse_batas_desa(json: &str) -> Result<Vec<BatasDesa>, SyncError> {
     Ok(out)
 }
 
-/// Klien baca Arumanis. `token` dipakai untuk endpoint yang butuh login (Bearer).
+/// Klien baca Arumanis. Dua cara masuk untuk endpoint yang butuh login:
+/// - `api_key` (disarankan untuk layanan): header `X-API-Key`, jalur `/public/v1/*`, tidak kedaluwarsa.
+/// - `token` (Sanctum, umur terbatas): header Bearer, jalur internal. Dipakai bila tidak ada kunci API.
 pub struct ArumanisClient {
     http: reqwest::Client,
     base: String,
     token: Option<String>,
+    api_key: Option<String>,
+}
+
+/// Jalur daftar unit SPAM: jalur publik bila memakai kunci API, jalur internal bila memakai token.
+pub fn units_path(use_api_key: bool) -> &'static str {
+    if use_api_key {
+        "/public/v1/spam-units"
+    } else {
+        "/spam-units"
+    }
+}
+
+/// Kunci API apa adanya tanpa spasi di ujung (sering ikut tersalin). Kosong menjadi tidak ada.
+pub fn normalize_api_key(key: &str) -> Option<String> {
+    let k = key.trim();
+    (!k.is_empty()).then(|| k.to_string())
 }
 
 #[derive(Deserialize)]
@@ -249,22 +267,35 @@ pub fn normalize_token(token: &str) -> String {
 
 impl ArumanisClient {
     pub fn new(base: &str, token: Option<String>) -> Result<Self, SyncError> {
+        Self::with_credentials(base, token, None)
+    }
+
+    /// `api_key` menang bila keduanya ada: kunci tidak kedaluwarsa, token Sanctum kedaluwarsa dalam beberapa jam.
+    pub fn with_credentials(base: &str, token: Option<String>, api_key: Option<String>) -> Result<Self, SyncError> {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))
             .user_agent("arsgis-sync")
             .build()?;
         let token = token.map(|t| normalize_token(&t)).filter(|t| !t.is_empty());
-        Ok(Self { http, base: base.trim_end_matches('/').to_string(), token })
+        let api_key = api_key.and_then(|k| normalize_api_key(&k));
+        Ok(Self { http, base: base.trim_end_matches('/').to_string(), token, api_key })
     }
 
     pub fn has_token(&self) -> bool {
         self.token.is_some()
     }
 
+    /// Ada kunci API atau token, jadi endpoint yang butuh login (unit SPAM, Pokmas) bisa dipanggil.
+    pub fn has_credentials(&self) -> bool {
+        self.api_key.is_some() || self.token.is_some()
+    }
+
     async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<Envelope<T>, SyncError> {
         let url = format!("{}{}", self.base, path);
         let mut req = self.http.get(&url).header("Accept", "application/json");
-        if let Some(t) = &self.token {
+        if let Some(k) = &self.api_key {
+            req = req.header("X-API-Key", k);
+        } else if let Some(t) = &self.token {
             req = req.bearer_auth(t);
         }
         let res = req.send().await?;
@@ -285,7 +316,8 @@ impl ArumanisClient {
         let mut out = Vec::new();
         let mut page = 1;
         loop {
-            let env = self.get::<Vec<Unit>>(&format!("/spam-units?per_page=200&page={page}")).await?;
+            let path = units_path(self.api_key.is_some());
+            let env = self.get::<Vec<Unit>>(&format!("{path}?per_page=200&page={page}")).await?;
             let last = env.meta.map(|m| m.last_page).unwrap_or(1).max(1);
             out.extend(env.data);
             if page >= last {
@@ -384,6 +416,32 @@ mod tests {
     fn token_from_cookie_is_decoded() {
         assert_eq!(normalize_token(" 12%7Cabc "), "12|abc");
         assert_eq!(normalize_token("12|abc"), "12|abc");
+    }
+
+    #[test]
+    fn api_key_uses_public_path_and_token_uses_internal_path() {
+        assert_eq!(units_path(true), "/public/v1/spam-units");
+        assert_eq!(units_path(false), "/spam-units");
+    }
+
+    #[test]
+    fn api_key_is_trimmed_and_blank_means_none() {
+        assert_eq!(normalize_api_key("  amis_live_abc \n").as_deref(), Some("amis_live_abc"));
+        assert_eq!(normalize_api_key("   "), None);
+        assert_eq!(normalize_api_key(""), None);
+    }
+
+    #[test]
+    fn credentials_exist_with_either_key_or_token() {
+        let none = ArumanisClient::with_credentials("https://x.id/api", None, None).unwrap();
+        assert!(!none.has_credentials() && !none.has_token());
+        let key = ArumanisClient::with_credentials("https://x.id/api", None, Some("amis_live_abc".into())).unwrap();
+        assert!(key.has_credentials() && !key.has_token());
+        let token = ArumanisClient::with_credentials("https://x.id/api", Some("1|abc".into()), None).unwrap();
+        assert!(token.has_credentials() && token.has_token());
+        // Isian kosong (spasi saja) tidak dihitung sebagai kredensial.
+        let blank = ArumanisClient::with_credentials("https://x.id/api", Some("  ".into()), Some("  ".into())).unwrap();
+        assert!(!blank.has_credentials());
     }
 
     #[test]

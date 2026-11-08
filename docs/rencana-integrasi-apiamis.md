@@ -35,7 +35,8 @@ Alur yang dirancang, memakai pola sinkron yang sudah ada:
 
 Syarat dan keputusan yang masih terbuka:
 
-- **`ARUMANIS_TOKEN` kosong.** Diperlukan akun baca-saja yang boleh membaca `/api/peripaan` dan `/api/spam-units/air-minum-pekerjaan`. Hak akses akun itu belum bisa dicek (permintaan tanpa token dijawab 401).
+- **Kunci API sudah ditulis, belum dipakai.** Di apiamis: tabel `api_keys`, header `X-API-Key`, `GET /api/public/v1/spam-units` dan `GET /api/public/v1/peripaan` (dengan `unit_spam_ids`), serta perintah `create-api-key`. Di arsgis: `ARUMANIS_API_KEY` dipakai untuk sinkron unit SPAM. Belum dijalankan terhadap MySQL nyata. Langkah berikutnya: jalankan `apiamis-api migrate`, buat kunci, isi `ARUMANIS_API_KEY`, lalu tarik daftar peripaan dan unduh KMZ-nya (belum ditulis di arsgis).
+- Token Sanctum (`ARUMANIS_TOKEN`) tetap menjadi cadangan, tetapi kedaluwarsa (default 12 jam) dan kosong di `.env`.
 - Apakah `file_url` (`{app_url}/storage/{media_id}/{file_name}`) bisa diunduh tanpa login? Belum dicek.
 - Satu pekerjaan bisa tertaut ke lebih dari satu unit. Aturan yang diusulkan: fitur masuk ke unit yang batas desanya memuatnya, sisanya dilewati dan dilaporkan.
 - Titik bernomor dari sinkron otomatis: jenis default `sr` (data pelanggan, hanya editor) atau dilewati? Disarankan **dilewati** sampai ada keputusan, supaya angka SR tidak terisi tebakan.

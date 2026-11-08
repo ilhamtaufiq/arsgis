@@ -18,6 +18,8 @@ const DESA_DIKECUALIKAN: [i64; 4] = [1000, 1001, 1002, 1003];
 pub struct SyncConfig {
     pub base_url: String,
     pub token: Option<String>,
+    /// Kunci API layanan (`X-API-Key`, jalur `/public/v1/*`). Disarankan: tidak kedaluwarsa. Menang atas `token`.
+    pub api_key: Option<String>,
     /// Jeda sinkron otomatis dalam menit. 0 mematikan sinkron otomatis.
     pub interval_menit: u64,
 }
@@ -27,6 +29,7 @@ impl SyncConfig {
         Self {
             base_url: env::var("ARUMANIS_API_URL").unwrap_or_else(|_| DEFAULT_ARUMANIS_API.into()),
             token: env::var("ARUMANIS_TOKEN").ok().filter(|t| !t.trim().is_empty()),
+            api_key: env::var("ARUMANIS_API_KEY").ok().filter(|t| !t.trim().is_empty()),
             interval_menit: env::var("ARUMANIS_SYNC_MENIT").ok().and_then(|v| v.parse().ok()).unwrap_or(60),
         }
     }
@@ -92,7 +95,12 @@ impl Syncer {
     }
 
     async fn execute(&self) -> Result<(ApplyResult, Option<String>), String> {
-        let client = ArumanisClient::new(&self.config.base_url, self.config.token.clone()).map_err(|e| e.to_string())?;
+        let client = ArumanisClient::with_credentials(
+            &self.config.base_url,
+            self.config.token.clone(),
+            self.config.api_key.clone(),
+        )
+        .map_err(|e| e.to_string())?;
 
         let stats = client.desa_stats().await.map_err(|e| e.to_string())?;
         // Daftar kosong hampir pasti gangguan di Arumanis. Jangan sampai semua desa ditandai tidak aktif.
@@ -117,8 +125,8 @@ impl Syncer {
             .collect();
 
         let mut catatan: Vec<String> = Vec::new();
-        let units = if !client.has_token() {
-            catatan.push("ARUMANIS_TOKEN belum diatur: unit SPAM dan Pokmas tidak disinkron".into());
+        let units = if !client.has_credentials() {
+            catatan.push("ARUMANIS_API_KEY (atau ARUMANIS_TOKEN) belum diatur: unit SPAM dan Pokmas tidak disinkron".into());
             None
         } else {
             match client.units().await {

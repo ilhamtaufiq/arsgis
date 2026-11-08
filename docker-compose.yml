@@ -35,6 +35,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?isi ADMIN_PASSWORD (minimal 10 karakter)}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       ARUMANIS_API_URL: ${ARUMANIS_API_URL:-https://apiamis.cianjur.space/api}
+      ARUMANIS_API_KEY: ${ARUMANIS_API_KEY:-}
       ARUMANIS_TOKEN: ${ARUMANIS_TOKEN:-}
       ARUMANIS_SYNC_MENIT: ${ARUMANIS_SYNC_MENIT:-60}
       RUST_LOG: ${RUST_LOG:-pipa_api=info,tower_http=info}
