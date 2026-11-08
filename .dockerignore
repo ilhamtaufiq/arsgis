@@ -1,0 +1,14 @@
+.git
+.claude
+target
+web/node_modules
+web/dist
+data/*.pmtiles
+.env
+.env.*
+!.env.example
+replica
+docs
+*.exe
+*.stackdump
+dev.bat

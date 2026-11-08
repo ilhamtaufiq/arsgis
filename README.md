@@ -125,6 +125,45 @@ arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
 | `ADMIN_PASSWORD` | tidak | Dibuat admin awal saat startup bila username belum ada. Minimal 10 karakter, server tidak mulai jika kurang. Kosong = tidak dibuat. Tidak mengubah password user yang sudah ada. |
 | `RUST_LOG` | tidak | Filter log tracing |
 
+## Deploy di Coolify
+
+`Dockerfile` membangun satu image: frontend (Bun), API (Rust, profil release), lalu runtime Debian slim yang menyajikan frontend dan basemap. `docker-compose.yml` menjalankan image itu bersama PostgreSQL dengan PostGIS. Server berhenti rapi saat menerima SIGTERM (redeploy), dan `/healthz` dipakai sebagai healthcheck.
+
+**Cara yang disarankan: resource Docker Compose**
+
+1. Coolify: New Resource, Docker Compose, pilih repo ini, branch `main`, berkas `docker-compose.yml`.
+2. Isi variabel lingkungan:
+
+   | Variabel | Wajib | Catatan |
+   | --- | --- | --- |
+   | `POSTGRES_PASSWORD` | ya | Pakai hex: `openssl rand -hex 16` (dipakai di URL koneksi, jadi hindari `@` dan `/`) |
+   | `JWT_SECRET` | ya | `openssl rand -hex 32` |
+   | `ADMIN_PASSWORD` | ya | Minimal 10 karakter. Admin awal dibuat saat pertama jalan |
+   | `ADMIN_USERNAME` | tidak | Default `admin` |
+   | `ARUMANIS_TOKEN` | tidak | Akun baca saja. Tanpa ini, unit SPAM dan Pokmas tidak ikut disinkron |
+   | `ARUMANIS_SYNC_MENIT` | tidak | Default 60 |
+   | `COOKIE_SECURE` | tidak | Default `true`. Aplikasi harus diakses lewat HTTPS, kalau tidak sesi login tidak tersimpan |
+
+3. Domain: pada service `app`, isi domain beserta port, misalnya `https://peta.contoh.id:8080`.
+4. Deploy. Migrasi basis data berjalan sendiri saat server start.
+5. Sekali setelah deploy pertama, di terminal kontainer `app`, muat batas desa:
+
+   ```bash
+   /app/pipa-api load-batas-desa /app/data/batas-desa-cianjur.geojson
+   ```
+
+6. Basemap (74 MB, tidak ada di git): salin `data/basemap-cianjur.pmtiles` ke volume `arsgis-basemap`. Nama berkas harus persis itu.
+
+   ```bash
+   docker cp data/basemap-cianjur.pmtiles <nama-kontainer-app>:/data/basemap/
+   ```
+
+   Tanpa berkas ini peta tetap tampil, hanya tanpa basemap.
+
+**Alternatif: Dockerfile saja.** Buat resource dari Dockerfile, lalu jalankan PostgreSQL sebagai resource **Docker Image** `postgis/postgis:16-3.4`. Resource Database bawaan Coolify memakai image PostgreSQL tanpa PostGIS dan migrasi awal akan gagal. Isi `DATABASE_URL` ke host internal basis data itu, ditambah variabel di tabel di atas, dan port aplikasi 8080. Pasang volume ke `/data/basemap`.
+
+**Data yang perlu dijaga:** volume `arsgis-db` (basis data, jadwalkan backup `pg_dump`) dan `arsgis-basemap`.
+
 ## Catatan keamanan
 
 - Jangan deploy ke domain publik sebelum `JWT_SECRET` diganti dan `COOKIE_SECURE=true` berjalan di belakang HTTPS.

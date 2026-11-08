@@ -1,0 +1,47 @@
+# arsgis + PostgreSQL/PostGIS. Dipakai Coolify (resource "Docker Compose") dan juga jalan lokal: docker compose up --build
+# Semua nilai rahasia diisi lewat variabel lingkungan (di Coolify: tab Environment Variables). Tidak ada yang tertulis di sini.
+# Gunakan hex untuk POSTGRES_PASSWORD (openssl rand -hex 16) karena dipakai di URL koneksi.
+# Tidak ada port yang dipublikasikan ke host: Coolify (Traefik) meneruskan domain ke port 8080 service app.
+
+services:
+  db:
+    # Wajib image PostGIS. Image postgres biasa tidak punya ekstensi postgis, dan migrasi awal membutuhkannya.
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: arsgis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD}
+      POSTGRES_DB: arsgis
+    volumes:
+      - arsgis-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arsgis -d arsgis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+    environment:
+      DATABASE_URL: postgres://arsgis:${POSTGRES_PASSWORD}@db:5432/arsgis
+      JWT_SECRET: ${JWT_SECRET:?isi JWT_SECRET (minimal 32 karakter, openssl rand -hex 32)}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?isi ADMIN_PASSWORD (minimal 10 karakter)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ARUMANIS_API_URL: ${ARUMANIS_API_URL:-https://apiamis.cianjur.space/api}
+      ARUMANIS_TOKEN: ${ARUMANIS_TOKEN:-}
+      ARUMANIS_SYNC_MENIT: ${ARUMANIS_SYNC_MENIT:-60}
+      RUST_LOG: ${RUST_LOG:-pipa_api=info,tower_http=info}
+    volumes:
+      # Berkas basemap-cianjur.pmtiles ditaruh di sini (lihat README, bagian Deploy di Coolify).
+      - arsgis-basemap:/data/basemap
+
+volumes:
+  arsgis-db:
+  arsgis-basemap:
