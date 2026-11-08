@@ -1,0 +1,53 @@
+/* Token tampilan peta. Salinan blok :root dari replica/design/tokens.css (tanpa @theme; komponen memakai var() biasa).
+   Ubah nilai di replica/design/tokens.json, jalankan cek kontras, lalu sinkronkan ke dua berkas CSS. */
+:root {
+  --map-bg: #ffffff;
+  --map-page: #ebebeb;
+  --map-surface: #f6f7f9;
+  --map-border: #e3e6ea;
+  --map-border-input: #868e98;
+  --map-text: #1f2933;
+  --map-text-muted: #5b6470;
+  --map-accent: #df5e3a;
+  --map-accent-strong: #b8431f;
+  --map-on-accent: #ffffff;
+  --map-accent-soft: #fdeee8;
+  --map-danger: #f14444;
+  --map-danger-strong: #b91c1c;
+  --map-on-danger: #ffffff;
+  --map-success: #15803d;
+  --map-badge-feature-bg: #ede9fe;
+  --map-badge-feature-text: #5b21b6;
+  --map-badge-service-bg: #dbeafe;
+  --map-badge-service-text: #1e40af;
+  --map-badge-vector-bg: #ccfbf1;
+  --map-badge-vector-text: #115e59;
+
+  --map-float: rgba(255, 255, 255, 0.94);
+  --map-float-blur: 8px;
+
+  --map-text-xs: 11px;   --map-leading-xs: 14px;
+  --map-text-sm: 13px;   --map-leading-sm: 18px;
+  --map-text-base: 14px; --map-leading-base: 20px;
+  --map-text-lg: 16px;   --map-leading-lg: 22px;
+
+  --map-radius-sm: 6px;
+  --map-radius-md: 12px;
+  --map-radius-lg: 16px;
+  --map-radius-pill: 999px;
+
+  --map-shadow-float: 0 4px 18px rgba(15, 23, 42, 0.14);
+  --map-shadow-panel: 0 0 24px rgba(15, 23, 42, 0.18);
+
+  --map-fast: 120ms;
+  --map-base: 200ms;
+  --map-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --map-edge: 12px;
+  --map-search-width: clamp(280px, 41vw, 420px);
+  --map-search-height: 36px;
+  --map-chip-height: 28px;
+  --map-round: 36px;
+  --map-panel-width: clamp(280px, 30vw, 360px);
+  --map-panel-header: 40px;
+}

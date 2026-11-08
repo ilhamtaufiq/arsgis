@@ -23,7 +23,7 @@ type Props = {
   onClose: () => void
 }
 
-/** Impor KML untuk editor dan admin: unggah, periksa laporan, lalu simpan ke jaringan. */
+/** Impor KML atau KMZ untuk editor dan admin: unggah, periksa laporan, lalu simpan ke jaringan. */
 export function ImportPanel({ networkId, open, onClose }: Props) {
   const queryClient = useQueryClient()
   const [file, setFile] = useState<File | null>(null)
@@ -69,7 +69,12 @@ export function ImportPanel({ networkId, open, onClose }: Props) {
   return (
     <div className="import">
       <div className="import-row">
-        <input type="file" accept=".kml,application/vnd.google-earth.kml+xml" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <input
+          type="file"
+          aria-label="Berkas KML atau KMZ"
+          accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
         <select aria-label="Jenis titik" value={titik} onChange={(e) => setTitik(e.target.value)}>
           {POINT_TYPES.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>

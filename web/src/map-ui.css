@@ -1,0 +1,171 @@
+/* Kontrol melayang di atas peta: kapsul pencarian putih, baris chip, deretan tombol bulat di bawah, zoom.
+   Menimpa tampilan lama di styles.css (dimuat lebih dulu); awalan .stage menjaga prioritas. Nilai dari map-tokens.css. */
+
+.stage { --shift: 0px; }
+/* Saat panel kiri terbuka, kontrol tengah bergeser ke tengah area peta yang tersisa. */
+.stage.has-panel { --shift: calc(var(--map-panel-width) / 2); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Kolom atas: kapsul unit, kapsul pencarian, baris chip */
+.stage .float-top {
+  left: calc(50% + var(--shift));
+  width: min(760px, calc(100% - 24px - 2 * var(--shift)));
+  gap: 8px;
+}
+.stage .brand {
+  background: var(--map-float);
+  border: 1px solid var(--map-border);
+  box-shadow: var(--map-shadow-float);
+  -webkit-backdrop-filter: blur(var(--map-float-blur));
+  backdrop-filter: blur(var(--map-float-blur));
+  padding: 6px 14px;
+  font-size: var(--map-text-sm);
+}
+.stage .brand span { color: var(--map-text-muted); }
+
+/* Pencarian: lebar tetap, tidak lagi melebar seperti dynamic island */
+.stage .island,
+.stage .island.is-open { width: var(--map-search-width); }
+.stage .island-bar {
+  height: var(--map-search-height);
+  padding: 0 6px 0 12px;
+  gap: 8px;
+  background: var(--map-float);
+  color: var(--map-text-muted);
+  border: 1px solid var(--map-border);
+  box-shadow: var(--map-shadow-float);
+  -webkit-backdrop-filter: blur(var(--map-float-blur));
+  backdrop-filter: blur(var(--map-float-blur));
+}
+.stage .island.is-open .island-bar { height: var(--map-search-height); padding: 0 6px 0 12px; }
+.stage .island.has-results .island-bar { border-radius: 18px 18px 8px 8px; }
+.stage .island-bar:focus-within { outline: 2px solid var(--map-accent); outline-offset: 2px; }
+.stage .island-bar input { color: var(--map-text); font-size: var(--map-text-base); caret-color: var(--map-accent-strong); }
+.stage .island-bar input::placeholder { color: var(--map-text-muted); }
+.stage .island-bar input:focus-visible { outline: none; }
+.stage .island-count { background: var(--map-accent-soft); color: var(--map-accent-strong); font-size: var(--map-text-xs); }
+.stage .island-clear { background: var(--map-surface); color: var(--map-text); }
+.stage .island-clear:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 2px; }
+.stage .island-results {
+  background: var(--map-bg);
+  color: var(--map-text);
+  border: 1px solid var(--map-border);
+  border-radius: 0 0 var(--map-radius-lg) var(--map-radius-lg);
+  box-shadow: var(--map-shadow-float);
+  margin-top: -8px;
+  padding: 14px 6px 6px;
+}
+.stage .island-results button { color: var(--map-text); border-radius: var(--map-radius-md); font-size: var(--map-text-base); }
+.stage .island-results button:hover { background: var(--map-surface); }
+.stage .island-results button.is-active { background: var(--map-accent-soft); box-shadow: inset 3px 0 0 var(--map-accent-strong); }
+.stage .island-results small { color: var(--map-text-muted); font-size: var(--map-text-xs); }
+.stage .island-empty { color: var(--map-text-muted); }
+
+/* Baris chip layer cepat */
+.chip-row {
+  display: flex;
+  gap: 8px;
+  max-width: min(100%, 560px);
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.layer-chip {
+  flex: 0 0 auto;
+  height: var(--map-chip-height);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--map-border);
+  border-radius: var(--map-radius-pill);
+  background: var(--map-float);
+  color: var(--map-text);
+  font: inherit;
+  font-size: var(--map-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--map-shadow-float);
+  -webkit-backdrop-filter: blur(var(--map-float-blur));
+  backdrop-filter: blur(var(--map-float-blur));
+  cursor: pointer;
+}
+.layer-chip:hover { border-color: var(--map-accent-strong); }
+.layer-chip:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 2px; }
+.layer-chip[aria-pressed="true"] { background: var(--map-accent-soft); border-color: var(--map-accent-strong); color: var(--map-accent-strong); }
+.chip-new { padding: 0 5px; border-radius: var(--map-radius-pill); background: var(--map-danger-strong); color: var(--map-on-danger); font-size: 10px; line-height: 14px; font-weight: 700; }
+
+/* Deretan tombol bulat di tengah bawah */
+.stage .toolbar {
+  top: auto;
+  right: auto;
+  bottom: var(--map-edge);
+  left: calc(50% + var(--shift));
+  transform: translateX(-50%);
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 140px - 2 * var(--shift));
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stage .toolbar::-webkit-scrollbar { display: none; }
+.stage .round {
+  flex: 0 0 auto;
+  width: var(--map-round);
+  height: var(--map-round);
+  background: var(--map-float);
+  color: var(--map-text);
+  border: 1px solid var(--map-border);
+  box-shadow: var(--map-shadow-float);
+  -webkit-backdrop-filter: blur(var(--map-float-blur));
+  backdrop-filter: blur(var(--map-float-blur));
+  transition: border-color var(--map-fast) var(--map-ease);
+}
+.stage .round:hover { border-color: var(--map-accent-strong); }
+.stage .round:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 2px; }
+.stage .round[aria-pressed="true"] { background: var(--map-accent-strong); border-color: var(--map-accent-strong); color: var(--map-on-accent); }
+
+/* Zoom: satu kapsul horizontal di kanan bawah */
+.leaflet-bottom.leaflet-right .leaflet-control-zoom { margin: 0 var(--map-edge) var(--map-edge) 0; display: flex; }
+.leaflet-control-zoom {
+  background: var(--map-float) !important;
+  border: 1px solid var(--map-border) !important;
+  box-shadow: var(--map-shadow-float) !important;
+}
+.leaflet-control-zoom a { color: var(--map-text) !important; }
+.leaflet-control-zoom a + a { border-left: 1px solid var(--map-border) !important; }
+.leaflet-control-zoom a:hover { background: var(--map-accent-soft); }
+.leaflet-control-zoom a:focus-visible { outline: 2px solid var(--map-accent); outline-offset: -2px; }
+.leaflet-control-zoom a.leaflet-disabled { color: var(--map-text-muted) !important; opacity: 0.5; cursor: not-allowed; }
+
+/* Elemen lain yang sebelumnya memakai posisi lama */
+.stage .notices { bottom: calc(var(--map-edge) + var(--map-round) + 16px); left: calc(50% + var(--shift)); }
+.stage .info { bottom: calc(var(--map-edge) + var(--map-round) + 16px); }
+.stage .legend { bottom: calc(var(--map-edge) + var(--map-round) + 16px); }
+.stage.has-panel .legend { left: calc(var(--map-panel-width) + 16px); }
+
+@media (max-width: 480px) {
+  .stage.has-panel { --shift: 0px; }
+  .stage .toolbar { max-width: calc(100% - 24px); left: 50%; }
+  .stage .round { width: 40px; height: 40px; }
+  .leaflet-bottom.leaflet-right { bottom: 56px; }
+  /* Kapsul akun pindah ke kanan atas supaya tidak menumpuk di atas zoom. */
+  .stage .float-right { top: var(--map-edge); bottom: auto; }
+  /* Kolom pencarian turun satu baris, jadi kapsul unit yang lebar tidak menabrak kapsul akun. */
+  .stage .float-top { top: calc(var(--map-edge) + 44px); }
+  .stage.has-panel .legend { left: 12px; }
+}

@@ -4,6 +4,7 @@ import type { FeatureCollection } from 'geojson'
 import 'leaflet/dist/leaflet.css'
 import { leafletLayer } from 'protomaps-leaflet'
 import { cakupanColor, type DesaGeo, type DesaProps } from './cakupanApi'
+import { attachDrawing } from './drawing'
 import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
 
@@ -70,7 +71,7 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
   useEffect(() => {
     if (!container.current) return
     const map = L.map(container.current, { center: [-6.82, 107.14], zoom: 13, zoomControl: false })
-    L.control.zoom({ position: 'bottomleft' }).addTo(map)
+    L.control.zoom({ position: 'bottomright', zoomInTitle: 'Perbesar', zoomOutTitle: 'Perkecil' }).addTo(map)
     leafletLayer({ url: BASEMAP_URL, flavor: 'light', lang: 'id', attribution: BASEMAP_ATTRIBUTION }).addTo(map)
 
     // Lapisan desa lebih dulu, supaya pipa dan titik selalu tergambar di atasnya.
@@ -118,10 +119,13 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
     map.on('moveend', () => onBboxChangeRef.current(toBbox(map)))
     onBboxChangeRef.current(toBbox(map))
 
+    const detachDrawing = attachDrawing(map)
+
     mapRef.current = map
     layerRef.current = layer
     desaLayerRef.current = desaLayer
     return () => {
+      detachDrawing()
       map.remove()
       mapRef.current = null
       layerRef.current = null

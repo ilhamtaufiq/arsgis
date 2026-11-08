@@ -28,6 +28,15 @@ type MapState = {
   /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
   focus: PipeFeature | null
   importOpen: boolean
+  /** Panel kiri yang terbuka: daftar layer, alat gambar, atau tidak ada. */
+  panel: 'layer' | 'alat' | null
+  /** Alat gambar yang sedang menunggu klik di peta. */
+  drawMode: 'rectangle' | null
+  /** Jumlah bentuk yang sudah digambar pengguna. */
+  drawnCount: number
+  setPanel: (panel: 'layer' | 'alat' | null) => void
+  setDrawMode: (mode: 'rectangle' | null) => void
+  setDrawnCount: (n: number) => void
   /** Unit SPAM yang dipilih untuk filter. Null berarti semua unit. */
   setNetwork: (id: number | null) => void
   setBbox: (bbox: Bbox) => void
@@ -46,6 +55,12 @@ export const useMapStore = create<MapState>((set) => ({
   cakupanOpen: true,
   focus: null,
   importOpen: false,
+  panel: null,
+  drawMode: null,
+  drawnCount: 0,
+  setPanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel, drawMode: null })),
+  setDrawMode: (mode) => set({ drawMode: mode }),
+  setDrawnCount: (n) => set({ drawnCount: n }),
   setNetwork: (id) => set({ networkId: id, selected: null, focus: null }),
   setBbox: (bbox) => set({ bbox }),
   select: (feature) => set({ selected: feature, desaSelected: null }),

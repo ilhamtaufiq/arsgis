@@ -3,7 +3,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// Pengembangan: API Rust berjalan di 8080, dan Vite meneruskan /api, /healthz, dan /basemap ke sana.
+// Pengembangan: API Rust berjalan di 8080 (atau port dari API_PORT, diisi dev.bat), dan Vite meneruskan
+// /api, /healthz, dan /basemap ke sana.
+const apiTarget = `http://127.0.0.1:${process.env.API_PORT ?? 8080}`
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -12,9 +15,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8080',
-      '/healthz': 'http://127.0.0.1:8080',
-      '/basemap': 'http://127.0.0.1:8080',
+      '/api': apiTarget,
+      '/healthz': apiTarget,
+      '/basemap': apiTarget,
     },
   },
 })
