@@ -8,3 +8,6 @@ data/*.pmtiles
 
 # Artefak build TypeScript
 *.tsbuildinfo
+
+# Dump crash Git Bash
+*.stackdump

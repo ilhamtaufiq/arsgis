@@ -98,6 +98,17 @@ pub fn can_read_types(role: Option<Role>, types: &[FeatureType]) -> bool {
     })
 }
 
+/// Nilai `min_role` di katalog layer yang boleh dilihat peran ini. `None` berarti pengunjung tanpa login.
+/// Layer dengan `min_role` di luar daftar ini tidak boleh dikirim ke pemanggil.
+pub fn catalog_roles(role: Option<Role>) -> &'static [&'static str] {
+    match role {
+        None => &["anon"],
+        Some(Role::Viewer) => &["anon", "viewer"],
+        Some(Role::Editor) => &["anon", "viewer", "editor"],
+        Some(Role::Admin) => &["anon", "viewer", "editor", "admin"],
+    }
+}
+
 /// Kotak batas dalam derajat WGS84, urutan `w,s,e,n` (kiri, bawah, kanan, atas).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bbox {
@@ -166,6 +177,15 @@ mod tests {
     fn only_sr_is_customer_data() {
         assert!(FeatureType::Sr.is_customer_data());
         assert!(!FeatureType::Pipa.is_customer_data());
+    }
+
+    #[test]
+    fn catalog_roles_never_expose_higher_roles() {
+        assert_eq!(catalog_roles(None), ["anon"]);
+        assert_eq!(catalog_roles(Some(Role::Viewer)), ["anon", "viewer"]);
+        assert!(!catalog_roles(Some(Role::Viewer)).contains(&"editor"));
+        assert!(!catalog_roles(Some(Role::Editor)).contains(&"admin"));
+        assert_eq!(catalog_roles(Some(Role::Admin)).len(), 4);
     }
 
     #[test]

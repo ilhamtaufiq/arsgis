@@ -1,9 +1,12 @@
 //! Akses data PostGIS: migrasi, daftar jaringan, dan fitur dalam bbox.
 
-use pipa_core::{Bbox, FeatureType};
+use pipa_core::{catalog_roles, Bbox, FeatureType, Role};
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::Row;
 use thiserror::Error;
+
+mod catalog_input;
+pub use catalog_input::{CatalogInput, CatalogPatch};
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
@@ -18,6 +21,10 @@ pub enum StoreError {
     Migrate(#[from] sqlx::migrate::MigrateError),
     #[error("hasil melebihi {MAX_FEATURES} fitur; persempit bbox atau jenis")]
     TooManyFeatures,
+    #[error("data dengan kunci yang sama sudah ada")]
+    Duplicate,
+    #[error("isian tidak memenuhi aturan tabel")]
+    Constraint,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -27,6 +34,71 @@ pub struct Network {
     pub unit_spam_id: Option<i64>,
     pub desa_id: Option<i64>,
     pub deskripsi: Option<String>,
+}
+
+/// Satu baris katalog layer, seperti yang dikirim ke klien.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CatalogLayer {
+    pub slug: String,
+    pub nama: String,
+    pub kategori: String,
+    pub sumber: String,
+    pub kind: String,
+    pub url: Option<String>,
+    pub params: serde_json::Value,
+    pub legend: Option<serde_json::Value>,
+    pub style: Option<serde_json::Value>,
+    pub attribution: Option<String>,
+    pub min_zoom: Option<i16>,
+    pub min_role: String,
+    pub chip: bool,
+    pub chip_urut: Option<i16>,
+    /// Tanggal ISO (YYYY-MM-DD) sampai kapan tag NEW tampil.
+    pub baru_sampai: Option<String>,
+}
+
+/// Baris katalog untuk halaman admin: bidang publik ditambah id dan status aktif.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CatalogAdminRow {
+    pub id: i64,
+    pub aktif: bool,
+    #[serde(flatten)]
+    pub layer: CatalogLayer,
+}
+
+const CATALOG_COLS: &str = "slug, nama, kategori, sumber, kind, url, params, legend, style, attribution, \
+    min_zoom, min_role, chip, chip_urut, to_char(baru_sampai, 'YYYY-MM-DD') AS baru_sampai";
+
+fn catalog_from_row(r: &PgRow) -> CatalogLayer {
+    CatalogLayer {
+        slug: r.get("slug"),
+        nama: r.get("nama"),
+        kategori: r.get("kategori"),
+        sumber: r.get("sumber"),
+        kind: r.get("kind"),
+        url: r.get("url"),
+        params: r.get("params"),
+        legend: r.get("legend"),
+        style: r.get("style"),
+        attribution: r.get("attribution"),
+        min_zoom: r.get("min_zoom"),
+        min_role: r.get("min_role"),
+        chip: r.get("chip"),
+        chip_urut: r.get("chip_urut"),
+        baru_sampai: r.get("baru_sampai"),
+    }
+}
+
+/// Kode SQLSTATE 23505 (unique) menjadi `Duplicate`, 23514 (check) menjadi `Constraint`.
+fn catalog_err(e: sqlx::Error) -> StoreError {
+    if let sqlx::Error::Database(db) = &e {
+        match db.code().as_deref() {
+            Some("23505") => return StoreError::Duplicate,
+            Some("23514") => return StoreError::Constraint,
+            _ => {}
+        }
+    }
+    StoreError::Db(e)
 }
 
 /// Satu fitur dengan geometri sudah dalam bentuk GeoJSON.
@@ -89,6 +161,93 @@ impl Store {
                 deskripsi: r.get("deskripsi"),
             })
             .collect())
+    }
+
+    /// Layer katalog yang boleh dilihat peran ini. Penyaringan dilakukan di SQL, jadi baris untuk
+    /// peran yang lebih tinggi tidak pernah keluar dari database. `None` berarti pengunjung tanpa login.
+    pub async fn list_catalog(&self, role: Option<Role>) -> Result<Vec<CatalogLayer>, StoreError> {
+        let allowed: Vec<String> = catalog_roles(role).iter().map(|s| s.to_string()).collect();
+        let rows = sqlx::query(&format!(
+            "SELECT {CATALOG_COLS} FROM layer_catalog WHERE aktif AND min_role = ANY($1) ORDER BY kategori, nama"
+        ))
+        .bind(&allowed)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.iter().map(catalog_from_row).collect())
+    }
+
+    /// Semua baris katalog untuk admin, termasuk yang nonaktif dan semua peran.
+    pub async fn list_catalog_admin(&self) -> Result<Vec<CatalogAdminRow>, StoreError> {
+        let rows = sqlx::query(&format!("SELECT id, aktif, {CATALOG_COLS} FROM layer_catalog ORDER BY kategori, nama"))
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| CatalogAdminRow { id: r.get("id"), aktif: r.get("aktif"), layer: catalog_from_row(r) })
+            .collect())
+    }
+
+    /// Menambah layer. `input` harus sudah lolos `CatalogInput::validated`. Slug kembar menghasilkan `Duplicate`.
+    pub async fn create_catalog(&self, input: &CatalogInput) -> Result<i64, StoreError> {
+        sqlx::query_scalar(
+            "INSERT INTO layer_catalog \
+               (slug, nama, kategori, sumber, kind, url, params, legend, style, attribution, \
+                min_zoom, min_role, chip, chip_urut, baru_sampai, aktif) \
+             VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, '{}'::jsonb), $8, $9, $10, $11, $12, $13, $14, $15::text::date, $16) \
+             RETURNING id",
+        )
+        .bind(&input.slug)
+        .bind(&input.nama)
+        .bind(&input.kategori)
+        .bind(&input.sumber)
+        .bind(&input.kind)
+        .bind(&input.url)
+        .bind(&input.params)
+        .bind(&input.legend)
+        .bind(&input.style)
+        .bind(&input.attribution)
+        .bind(input.min_zoom)
+        .bind(&input.min_role)
+        .bind(input.chip)
+        .bind(input.chip_urut)
+        .bind(&input.baru_sampai)
+        .bind(input.aktif)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(catalog_err)
+    }
+
+    /// Mengubah bidang yang dikirim saja. `false` bila id tidak ada. Aturan antarbidang dijaga CHECK (`Constraint`).
+    pub async fn update_catalog(&self, id: i64, p: &CatalogPatch) -> Result<bool, StoreError> {
+        let result = sqlx::query(
+            "UPDATE layer_catalog SET \
+                nama = COALESCE($2, nama), kategori = COALESCE($3, kategori), sumber = COALESCE($4, sumber), \
+                url = COALESCE($5, url), attribution = COALESCE($6, attribution), min_role = COALESCE($7, min_role), \
+                aktif = COALESCE($8, aktif), chip = COALESCE($9, chip), chip_urut = COALESCE($10, chip_urut), \
+                baru_sampai = COALESCE($11::text::date, baru_sampai) \
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(&p.nama)
+        .bind(&p.kategori)
+        .bind(&p.sumber)
+        .bind(&p.url)
+        .bind(&p.attribution)
+        .bind(&p.min_role)
+        .bind(p.aktif)
+        .bind(p.chip)
+        .bind(p.chip_urut)
+        .bind(&p.baru_sampai)
+        .execute(&self.pool)
+        .await
+        .map_err(catalog_err)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Menghapus layer dari katalog. `false` bila id tidak ada.
+    pub async fn delete_catalog(&self, id: i64) -> Result<bool, StoreError> {
+        let result = sqlx::query("DELETE FROM layer_catalog WHERE id = $1").bind(id).execute(&self.pool).await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Fitur jaringan dalam bbox, dengan filter jenis opsional. Fitur terhapus (soft delete) dilewati.
@@ -1020,5 +1179,110 @@ mod kelengkapan_tests {
     #[test]
     fn lengkap_bila_sr_sama() {
         assert_eq!(status_kelengkapan(true, 12, 12, 0.8), "lengkap");
+    }
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+
+    async fn slugs(store: &Store, role: Option<Role>) -> Vec<String> {
+        store.list_catalog(role).await.unwrap().into_iter().map(|l| l.slug).collect()
+    }
+
+    /// Butuh DATABASE_URL ke PostgreSQL dengan PostGIS (sqlx membuat database uji sementara).
+    /// Jalankan: `cargo test -p pipa-store -- --ignored`
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn katalog_tidak_membocorkan_layer_peran_lebih_tinggi(pool: PgPool) {
+        for role in ["anon", "viewer", "editor", "admin"] {
+            sqlx::query(
+                "INSERT INTO layer_catalog (slug, nama, kategori, sumber, kind, min_role) \
+                 VALUES ($1, $1, 'uji', 'uji', 'internal', $2)",
+            )
+            .bind(format!("uji-{role}"))
+            .bind(role)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO layer_catalog (slug, nama, kategori, sumber, kind, min_role, aktif) \
+             VALUES ('uji-mati', 'mati', 'uji', 'uji', 'internal', 'anon', false)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let store = Store::from_pool(pool);
+        let anon = slugs(&store, None).await;
+        assert!(anon.contains(&"cakupan-spm".to_string()), "layer awal harus publik");
+        assert!(anon.contains(&"uji-anon".to_string()));
+        assert!(!anon.contains(&"uji-viewer".to_string()));
+        assert!(!anon.contains(&"uji-mati".to_string()), "layer nonaktif tidak boleh keluar");
+
+        let viewer = slugs(&store, Some(Role::Viewer)).await;
+        assert!(viewer.contains(&"uji-viewer".to_string()));
+        assert!(!viewer.contains(&"uji-editor".to_string()));
+
+        let editor = slugs(&store, Some(Role::Editor)).await;
+        assert!(editor.contains(&"uji-editor".to_string()));
+        assert!(!editor.contains(&"uji-admin".to_string()));
+
+        let admin = slugs(&store, Some(Role::Admin)).await;
+        assert!(admin.contains(&"uji-admin".to_string()));
+        assert!(!admin.contains(&"uji-mati".to_string()));
+    }
+
+    fn input(slug: &str, min_role: &str) -> CatalogInput {
+        serde_json::from_value(serde_json::json!({
+            "slug": slug, "nama": slug, "kategori": "uji", "sumber": "uji", "kind": "wms",
+            "url": "https://contoh.go.id/wms", "min_role": min_role, "baru_sampai": "2026-12-31"
+        }))
+        .unwrap()
+    }
+
+    /// Alur admin: tambah, slug kembar, visibilitas menurut peran, ubah, pelanggaran aturan, hapus.
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn admin_katalog_tambah_ubah_hapus(pool: PgPool) {
+        let store = Store::from_pool(pool);
+        let id = store.create_catalog(&input("rahasia-editor", "editor").validated().unwrap()).await.unwrap();
+
+        // Slug kembar ditolak sebagai Duplicate, bukan kesalahan internal.
+        let dup = store.create_catalog(&input("rahasia-editor", "anon").validated().unwrap()).await;
+        assert!(matches!(dup, Err(StoreError::Duplicate)));
+
+        // Layer untuk editor tidak terlihat pengunjung maupun viewer, tetapi terlihat editor.
+        assert!(!slugs(&store, None).await.contains(&"rahasia-editor".to_string()));
+        assert!(!slugs(&store, Some(Role::Viewer)).await.contains(&"rahasia-editor".to_string()));
+        assert!(slugs(&store, Some(Role::Editor)).await.contains(&"rahasia-editor".to_string()));
+
+        // Tanggal NEW tersimpan dan kembali sebagai teks ISO.
+        let admin_rows = store.list_catalog_admin().await.unwrap();
+        let row = admin_rows.iter().find(|r| r.id == id).unwrap();
+        assert_eq!(row.layer.baru_sampai.as_deref(), Some("2026-12-31"));
+
+        // Menurunkan ke publik membuatnya terlihat pengunjung; menonaktifkan menyembunyikannya lagi.
+        let publik = CatalogPatch { min_role: Some("anon".into()), ..Default::default() };
+        assert!(store.update_catalog(id, &publik).await.unwrap());
+        assert!(slugs(&store, None).await.contains(&"rahasia-editor".to_string()));
+        let mati = CatalogPatch { aktif: Some(false), ..Default::default() };
+        assert!(store.update_catalog(id, &mati).await.unwrap());
+        assert!(!slugs(&store, Some(Role::Admin)).await.contains(&"rahasia-editor".to_string()));
+        // Admin tetap melihat baris nonaktif dengan aktif = false.
+        let admin_rows = store.list_catalog_admin().await.unwrap();
+        assert!(!admin_rows.iter().find(|r| r.id == id).unwrap().aktif);
+
+        // chip tanpa chip_urut melanggar CHECK dan dilaporkan sebagai Constraint.
+        let chip = CatalogPatch { chip: Some(true), ..Default::default() };
+        assert!(matches!(store.update_catalog(id, &chip).await, Err(StoreError::Constraint)));
+
+        // Id yang tidak ada: false, bukan error.
+        assert!(!store.update_catalog(999_999, &publik).await.unwrap());
+        assert!(!store.delete_catalog(999_999).await.unwrap());
+
+        assert!(store.delete_catalog(id).await.unwrap());
+        assert!(!store.delete_catalog(id).await.unwrap());
     }
 }

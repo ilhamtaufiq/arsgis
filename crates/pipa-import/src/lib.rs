@@ -11,6 +11,47 @@ use thiserror::Error;
 pub enum ImportError {
     #[error("KML tidak valid: {0}")]
     Xml(String),
+    #[error("berkas bukan teks UTF-8")]
+    NotUtf8,
+    #[error("KMZ tidak valid: {0}")]
+    Zip(String),
+    #[error("KMZ tidak berisi berkas .kml")]
+    NoKml,
+    #[error("isi KML melebihi {0} MB setelah dibuka")]
+    TooLarge(usize),
+}
+
+/// Batas ukuran KML setelah dibuka dari KMZ. Mencegah zip kecil yang mengembang jadi sangat besar.
+const MAX_KML_BYTES: usize = 50 * 1024 * 1024;
+
+/// Teks KML dari berkas unggahan. KMZ (zip) dikenali dari awalan `PK\x03\x04` dan dibuka: dipakai `doc.kml`,
+/// atau berkas `.kml` pertama bila namanya lain. Selain itu berkas dianggap KML teks biasa.
+pub fn kml_text(bytes: &[u8]) -> Result<String, ImportError> {
+    kml_text_limited(bytes, MAX_KML_BYTES)
+}
+
+fn kml_text_limited(bytes: &[u8], max: usize) -> Result<String, ImportError> {
+    use std::io::Read;
+
+    if !bytes.starts_with(b"PK\x03\x04") {
+        return std::str::from_utf8(bytes).map(str::to_string).map_err(|_| ImportError::NotUtf8);
+    }
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| ImportError::Zip(e.to_string()))?;
+    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
+    let is_kml = |n: &str| !n.ends_with('/') && n.to_ascii_lowercase().ends_with(".kml");
+    let chosen = names
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case("doc.kml"))
+        .or_else(|| names.iter().find(|n| is_kml(n)))
+        .ok_or(ImportError::NoKml)?;
+    let entry = archive.by_name(chosen).map_err(|e| ImportError::Zip(e.to_string()))?;
+    let mut buf = Vec::new();
+    // Baca satu byte lebih dari batas supaya kelebihan terdeteksi tanpa memuat seluruh isi.
+    entry.take(max as u64 + 1).read_to_end(&mut buf).map_err(|e| ImportError::Zip(e.to_string()))?;
+    if buf.len() > max {
+        return Err(ImportError::TooLarge(max / (1024 * 1024)));
+    }
+    String::from_utf8(buf).map_err(|_| ImportError::NotUtf8)
 }
 
 /// Satu fitur hasil parse, siap ditulis ke staging.
@@ -148,13 +189,19 @@ fn skip(out: &mut Preview, nama: Option<String>, alasan: &str) {
 }
 
 /// Jenis titik dari kata kunci di nama. Nama yang tidak punya kata kunci mengembalikan None.
+///
+/// Pencocokan per kata (dipisah tanda baca dan spasi), supaya singkatan lapangan ikut terbaca tetapi
+/// nama desa yang kebetulan mengandung huruf yang sama tidak: `BRONCAP`, `BRONCAPTERING`, `BRONKAP...`
+/// untuk bronkaptering, dan kata `RV` berdiri sendiri untuk reservoir (`MKJCKL RV EXISTING`).
 fn jenis_titik(nama: Option<&str>) -> Option<FeatureType> {
     let upper = nama?.to_uppercase();
-    if upper.contains("BRONCAPTERING") {
+    let words: Vec<&str> = upper.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let has_prefix = |prefix: &str| words.iter().any(|w| w.starts_with(prefix));
+    if has_prefix("BRONCAP") || has_prefix("BRONKAP") {
         Some(FeatureType::Bronkaptering)
     } else if upper.contains("VALVE") {
         Some(FeatureType::Valve)
-    } else if upper.contains("RESERVOIR") {
+    } else if upper.contains("RESERVOIR") || words.contains(&"RV") {
         Some(FeatureType::Reservoir)
     } else {
         None
@@ -248,5 +295,88 @@ mod tests {
         let p = parse_kml(SAMPLE, None).unwrap();
         assert_eq!(p.features.len(), 3);
         assert!(p.skipped.iter().any(|s| s.nama.as_deref() == Some("BJKASIH 10")));
+    }
+
+    #[test]
+    fn field_abbreviations_are_recognised_as_point_types() {
+        // Nama titik nyata dari KMZ lapangan.
+        assert_eq!(jenis_titik(Some("MKJCKL RV EXISTING")), Some(FeatureType::Reservoir));
+        assert_eq!(jenis_titik(Some("KARANGWANGI RV Kap. 25 M3")), Some(FeatureType::Reservoir));
+        assert_eq!(jenis_titik(Some("MKJCKL BRONCAP CISALADA")), Some(FeatureType::Bronkaptering));
+        assert_eq!(jenis_titik(Some("MKJKL BRONCAP RAWA RAMPE")), Some(FeatureType::Bronkaptering));
+        assert_eq!(jenis_titik(Some("BJKASIH BRONCAPTERING")), Some(FeatureType::Bronkaptering));
+        assert_eq!(jenis_titik(Some("Broncap-1")), Some(FeatureType::Bronkaptering));
+        assert_eq!(jenis_titik(Some("Reservoir utama")), Some(FeatureType::Reservoir));
+        assert_eq!(jenis_titik(Some("valve induk")), Some(FeatureType::Valve));
+    }
+
+    #[test]
+    fn numbered_points_and_lookalikes_stay_unclassified() {
+        // Titik bernomor adalah sambungan rumah (jatuh ke jenis default). "RV" harus kata sendiri.
+        for nama in ["BJKASIH 10", "KARANGWANGI 4", "KARANGWANGI  1", "SERVIS 1", "ARVIN 2", "RVX 3", ""] {
+            assert_eq!(jenis_titik(Some(nama)), None, "{nama:?}");
+        }
+        assert_eq!(jenis_titik(None), None);
+    }
+
+    fn make_zip(files: &[(&str, &[u8])], method: zip::CompressionMethod) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default().compression_method(method);
+        for (name, data) in files {
+            w.start_file(*name, opts).unwrap();
+            w.write_all(data).unwrap();
+        }
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn plain_kml_passes_through() {
+        assert_eq!(kml_text(SAMPLE.as_bytes()).unwrap(), SAMPLE);
+    }
+
+    #[test]
+    fn kmz_doc_kml_is_extracted_and_parses_like_kml() {
+        for method in [zip::CompressionMethod::Stored, zip::CompressionMethod::Deflated] {
+            let kmz = make_zip(&[("doc.kml", SAMPLE.as_bytes())], method);
+            let text = kml_text(&kmz).unwrap();
+            assert_eq!(text, SAMPLE);
+            let p = parse_kml(&text, Some(FeatureType::Sr)).unwrap();
+            assert_eq!(p.features.iter().filter(|f| f.feature_type == FeatureType::Pipa).count(), 2);
+        }
+    }
+
+    #[test]
+    fn kmz_prefers_doc_kml_then_any_kml() {
+        let kmz = make_zip(
+            &[("files/icon.png", b"x"), ("lain.kml", b"<kml>lain</kml>"), ("doc.kml", b"<kml>doc</kml>")],
+            zip::CompressionMethod::Stored,
+        );
+        assert_eq!(kml_text(&kmz).unwrap(), "<kml>doc</kml>");
+        let tanpa_doc = make_zip(&[("files/icon.png", b"x"), ("peta.KML", b"<kml>peta</kml>")], zip::CompressionMethod::Stored);
+        assert_eq!(kml_text(&tanpa_doc).unwrap(), "<kml>peta</kml>");
+    }
+
+    #[test]
+    fn kmz_without_kml_or_broken_is_rejected() {
+        let kosong = make_zip(&[("files/icon.png", b"x")], zip::CompressionMethod::Stored);
+        assert!(matches!(kml_text(&kosong), Err(ImportError::NoKml)));
+        // Awalan zip tetapi isinya rusak.
+        assert!(matches!(kml_text(b"PK\x03\x04bukan-zip"), Err(ImportError::Zip(_))));
+    }
+
+    #[test]
+    fn non_utf8_is_rejected_for_plain_and_kmz() {
+        assert!(matches!(kml_text(&[0xff, 0xfe, 0x00]), Err(ImportError::NotUtf8)));
+        let kmz = make_zip(&[("doc.kml", &[0xff, 0xfe, 0x00][..])], zip::CompressionMethod::Stored);
+        assert!(matches!(kml_text(&kmz), Err(ImportError::NotUtf8)));
+    }
+
+    #[test]
+    fn oversized_kml_inside_kmz_is_rejected() {
+        let besar = vec![b'a'; 2048];
+        let kmz = make_zip(&[("doc.kml", &besar[..])], zip::CompressionMethod::Deflated);
+        assert!(kml_text_limited(&kmz, 4096).is_ok());
+        assert!(matches!(kml_text_limited(&kmz, 1024), Err(ImportError::TooLarge(_))));
     }
 }

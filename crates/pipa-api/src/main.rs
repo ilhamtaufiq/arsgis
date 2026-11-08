@@ -22,7 +22,7 @@ use axum::{
     Json, Router,
 };
 use pipa_core::{can_read_types, parse_types, Bbox, CoreError, FeatureType, Role};
-use pipa_store::{CommitOutcome, Store, StoreError, StagingRow};
+use pipa_store::{CatalogInput, CatalogPatch, CommitOutcome, Store, StoreError, StagingRow};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
@@ -77,6 +77,11 @@ impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         match e {
             StoreError::TooManyFeatures => ApiError(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
+            StoreError::Duplicate => ApiError(StatusCode::CONFLICT, "slug sudah dipakai".into()),
+            StoreError::Constraint => ApiError(
+                StatusCode::BAD_REQUEST,
+                "kombinasi isian tidak valid: layer chip butuh chip_urut, layer selain internal butuh url".into(),
+            ),
             other => {
                 tracing::error!(error = %other, "kesalahan database");
                 ApiError(StatusCode::INTERNAL_SERVER_ERROR, "kesalahan internal".into())
@@ -105,6 +110,18 @@ async fn healthz(State(state): State<AppState>) -> Result<Json<Value>, ApiError>
 async fn list_networks(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let networks = state.store.list_networks().await?;
     Ok(Json(json!({ "data": networks })))
+}
+
+/// Katalog layer menurut peran pemanggil. Isinya berbeda per peran, jadi hanya boleh di-cache oleh
+/// peramban pengguna itu sendiri (`private`), bukan oleh proxy bersama.
+async fn list_catalog(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> Result<Response, ApiError> {
+    let layers = state.store.list_catalog(user.map(|u| u.role)).await?;
+    let mut response = Json(json!({ "data": layers })).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=60"));
+    response.headers_mut().insert(header::VARY, HeaderValue::from_static("Cookie"));
+    Ok(response)
 }
 
 async fn login(State(state): State<AppState>, Json(body): Json<LoginBody>) -> Result<Response, ApiError> {
@@ -259,8 +276,9 @@ async fn upload_import(
     if body.is_empty() {
         return Err(ApiError(StatusCode::BAD_REQUEST, "berkas kosong".into()));
     }
-    let xml = std::str::from_utf8(&body)
-        .map_err(|_| ApiError(StatusCode::BAD_REQUEST, "berkas bukan teks UTF-8".into()))?;
+    // KML teks biasa atau KMZ (zip berisi doc.kml); dikenali dari isi berkas, bukan dari nama.
+    let xml = pipa_import::kml_text(&body).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let xml = xml.as_str();
     let network_id = params
         .network_id
         .ok_or_else(|| bad_request("network_id wajib: pilih unit SPAM tujuan impor"))?;
@@ -494,6 +512,49 @@ async fn admin_create_network(
     Ok((StatusCode::CREATED, Json(json!({ "id": id, "nama": nama }))).into_response())
 }
 
+/// Semua layer katalog, termasuk yang nonaktif dan untuk semua peran.
+async fn admin_list_catalog(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
+    let layers = state.store.list_catalog_admin().await?;
+    Ok(Json(json!({ "data": layers })))
+}
+
+async fn admin_create_catalog(
+    State(state): State<AppState>,
+    Admin(me): Admin,
+    Json(body): Json<CatalogInput>,
+) -> Result<Response, ApiError> {
+    let input = body.validated().map_err(|m| bad_request(&m))?;
+    let id = state.store.create_catalog(&input).await?;
+    tracing::info!(admin = %me.username, id, slug = %input.slug, min_role = %input.min_role, "layer katalog ditambah");
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "slug": input.slug }))).into_response())
+}
+
+async fn admin_patch_catalog(
+    State(state): State<AppState>,
+    Admin(me): Admin,
+    Path(id): Path<i64>,
+    Json(body): Json<CatalogPatch>,
+) -> Result<Json<Value>, ApiError> {
+    let patch = body.validated().map_err(|m| bad_request(&m))?;
+    if !state.store.update_catalog(id, &patch).await? {
+        return Err(ApiError(StatusCode::NOT_FOUND, "layer tidak ditemukan".into()));
+    }
+    tracing::info!(admin = %me.username, id, "layer katalog diubah");
+    Ok(Json(json!({ "id": id, "ok": true })))
+}
+
+async fn admin_delete_catalog(
+    State(state): State<AppState>,
+    Admin(me): Admin,
+    Path(id): Path<i64>,
+) -> Result<Response, ApiError> {
+    if !state.store.delete_catalog(id).await? {
+        return Err(ApiError(StatusCode::NOT_FOUND, "layer tidak ditemukan".into()));
+    }
+    tracing::info!(admin = %me.username, id, "layer katalog dihapus");
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
 async fn admin_list_imports(State(state): State<AppState>, _: Admin) -> Result<Json<Value>, ApiError> {
     let imports = state.store.list_imports(100).await?;
     Ok(Json(json!({ "data": imports })))
@@ -570,6 +631,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/me", get(me))
+        .route("/api/v1/catalog", get(list_catalog))
         .route("/api/v1/networks", get(list_networks))
         .route("/api/v1/networks/{id}/geojson", get(network_geojson))
         .route("/api/v1/features/geojson", get(all_geojson))
@@ -581,6 +643,11 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/admin/users", get(admin_list_users).post(admin_create_user))
         .route("/api/v1/admin/users/{id}", axum::routing::patch(admin_update_user))
         .route("/api/v1/admin/networks", get(admin_list_networks).post(admin_create_network))
+        .route("/api/v1/admin/catalog", get(admin_list_catalog).post(admin_create_catalog))
+        .route(
+            "/api/v1/admin/catalog/{id}",
+            axum::routing::patch(admin_patch_catalog).delete(admin_delete_catalog),
+        )
         .route("/api/v1/admin/imports", get(admin_list_imports))
         .route("/api/v1/admin/sync", post(admin_sync))
         .route("/api/v1/admin/sync-runs", get(admin_sync_runs))
