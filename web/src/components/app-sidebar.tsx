@@ -1,4 +1,4 @@
-import { Map as MapIcon, LayoutDashboard, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Map as MapIcon, ShieldCheck } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -13,8 +13,8 @@ import {
 } from '@/components/ui/sidebar'
 
 const MENU = [
-  { title: 'Peta', href: '/', icon: MapIcon },
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Peta', href: '/peta', icon: MapIcon },
   { title: 'Admin', href: '/admin', icon: ShieldCheck },
 ]
 

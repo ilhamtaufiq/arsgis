@@ -14,7 +14,7 @@ export function FeaturesChart({ data }: { data: Item[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Fitur per jenis</CardTitle>
-        <CardDescription>Jumlah fitur aktif di jaringan yang dipilih</CardDescription>
+        <CardDescription>Jumlah fitur di unit SPAM yang ditampilkan</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="h-64 w-full">

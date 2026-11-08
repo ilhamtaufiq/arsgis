@@ -10,6 +10,10 @@ use tokio::sync::Mutex;
 
 const DEFAULT_ARUMANIS_API: &str = "https://apiamis.cianjur.space/api";
 
+/// Id desa di Arumanis yang tidak dipakai: entri duplikat atau tanpa data (ejaan lain dari desa yang sudah ada,
+/// dan dua desa yang tidak ada di batas BPS). Tidak dimasukkan ke `ref_desa`, jadi ditandai tidak aktif.
+const DESA_DIKECUALIKAN: [i64; 4] = [1000, 1001, 1002, 1003];
+
 #[derive(Clone)]
 pub struct SyncConfig {
     pub base_url: String,
@@ -97,6 +101,7 @@ impl Syncer {
         }
         let desa: Vec<DesaRefInput> = stats
             .into_iter()
+            .filter(|s| !DESA_DIKECUALIKAN.contains(&s.desa_id))
             .map(|s| DesaRefInput {
                 id: s.desa_id,
                 nama: s.desa.unwrap_or_default(),

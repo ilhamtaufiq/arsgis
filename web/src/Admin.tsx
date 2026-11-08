@@ -42,7 +42,7 @@ export function AdminPage() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <SiteHeader title="Admin" actions={<AuthPanel user={user} />} />
+        <SiteHeader title="Admin" actions={<AuthPanel user={user} inline />} />
         <main className="flex flex-1 flex-col gap-4 p-4 md:p-6">
           {me.isPending ? null : user?.role !== 'admin' ? (
             <Card>
