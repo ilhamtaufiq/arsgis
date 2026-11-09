@@ -63,3 +63,10 @@
 .impor-btn { min-height: 40px; padding: 0 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; font: inherit; cursor: pointer; }
 .impor-btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .impor-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Riwayat impor, aset terhapus, dan dialog konfirmasi */
+.impor-muted { color: #6b7280; font-size: 13px; }
+.impor-muted small { display: block; }
+.impor-peringatan { display: grid; gap: 8px; padding: 12px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px; color: #7c2d12; }
+.impor-peringatan p { margin: 0; }
+.impor-cek { display: flex; align-items: center; gap: 8px; font-weight: 600; }
