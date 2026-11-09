@@ -71,7 +71,21 @@
 .impor-peringatan { display: grid; gap: 8px; padding: 12px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px; color: #7c2d12; }
 .impor-peringatan p { margin: 0; }
 .impor-cek { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.impor-tabel-wrap { overflow-x: auto; }
+.impor-tabel-wrap { overflow-x: auto; max-width: 100%; }
+/* Ponsel: tabel digulir di dalam pembungkusnya, halaman tidak. Target sentuh 44 px. */
+@media (max-width: 767px) {
+  .impor { padding: 16px; }
+  .impor-card { padding: 16px; min-width: 0; }
+  .impor-btn { min-height: 44px; }
+  .aset-field input,
+  .aset-field select { min-height: 44px; }
+  .aset-bar { bottom: 12px; max-width: calc(100% - 24px); }
+  .aset-bar button,
+  .aset-aksi-btn button { min-height: 44px; }
+}
+@media (max-width: 359px) {
+  .aset-jenis { grid-template-columns: minmax(0, 1fr); }
+}
 .impor-tabel { width: 100%; border-collapse: collapse; font-size: 13px; }
 .impor-tabel th, .impor-tabel td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
 .impor-tabel th { font-weight: 600; color: #374151; }

@@ -23,7 +23,8 @@
   --secondary: #f4f4f5;
   --secondary-foreground: #333333;
   --muted: #f4f4f5;
-  --muted-foreground: #6b7280;
+  /* Diturunkan dari #6b7280 agar kontras AA di latar #EBEBEB (halaman dashboard dan admin). */
+  --muted-foreground: #5b6470;
   --accent: #fbe3d9;
   --accent-foreground: #7c2d12;
   --destructive: oklch(0.64 0.21 25.33);

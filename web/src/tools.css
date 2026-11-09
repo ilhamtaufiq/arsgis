@@ -165,8 +165,29 @@
 @keyframes panel-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .acc-chevron { transition: none; } }
 
-/* Layar sempit: lembar bawah selebar layar */
-@media (max-width: 480px) {
-  .stage .side-panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 70%; border-radius: var(--map-radius-lg) var(--map-radius-lg) 0 0; }
-  .stage .side-panel:has(> .panel-head:last-child) { border-radius: var(--map-radius-lg) var(--map-radius-lg) 0 0; }
+/* Ponsel (di bawah 768 px): panel menjadi lembar bawah setinggi maksimal 70% layar. Isinya bisa digulir di dalam lembar. */
+@media (max-width: 767px) {
+  .stage .side-panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 70%;
+    border-radius: var(--map-radius-lg) var(--map-radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior: contain;
+  }
+  /* Panel yang diminimalkan (hanya kepala) tetap menempel di bawah. */
+  .stage .side-panel:has(> .panel-head:last-child) { top: auto; bottom: 0; border-radius: var(--map-radius-lg) var(--map-radius-lg) 0 0; }
+  .panel-body { overscroll-behavior: contain; }
+  .panel-head button { width: 44px; height: 44px; }
+  .tool-btn { min-height: 44px; }
+  .field-search { height: 44px; }
+  .filters select { height: 44px; }
+  .layer-active button { min-width: 44px; min-height: 44px; }
+}
+/* Layar sangat sempit: kolom filter jadi satu */
+@media (max-width: 359px) {
+  .filters { grid-template-columns: minmax(0, 1fr); }
 }
