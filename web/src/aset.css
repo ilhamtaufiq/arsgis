@@ -49,9 +49,9 @@
 .aset-jenis { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 
 /* Halaman impor */
-.impor { min-height: 100vh; background: #ebebeb; padding: 16px; display: grid; place-items: start center; }
-.impor-card { width: min(640px, 100%); background: #fff; border-radius: 16px; padding: 20px; display: grid; gap: 14px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); font-size: 14px; }
-.impor-card h1 { margin: 0; font-size: 20px; }
+.impor { width: 100%; padding: 16px; box-sizing: border-box; display: flex; justify-content: center; }
+.impor-card { width: min(640px, 100%); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; display: grid; gap: 14px; font-size: 14px; color: #1f2937; box-sizing: border-box; }
+.impor-card h2.impor-judul { margin: 0; font-size: 18px; }
 .impor-card p { margin: 0; }
 .impor-field { display: grid; gap: 4px; }
 .impor-field label { font-weight: 600; }

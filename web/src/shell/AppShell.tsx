@@ -6,6 +6,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { Separator } from '@/components/ui/separator'
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
+import '../preflight.css'
 
 type Props = {
   /** Nama halaman aktif, tampil di header. */

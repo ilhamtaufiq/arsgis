@@ -6,6 +6,7 @@ import { pesanDuplikat, pesanGalatSimpan } from './importLogic'
 import { fetchPekerjaan } from './pekerjaanApi'
 import { LABEL_JENIS } from './asetForm'
 import { ImporDaftar } from './ImporDaftar'
+import { Combobox } from './components/Combobox'
 import { PanelAsetTerhapus } from './AsetTerhapus'
 import type { FeatureType } from './types'
 import './aset.css'
@@ -40,7 +41,7 @@ export function ImporPage() {
     return (
       <div className="impor">
         <div className="impor-card">
-          <h1>Impor data</h1>
+          <h2 className="impor-judul">Unggah berkas</h2>
           <p role="alert" className="panel-error">Halaman ini hanya untuk editor dan admin.</p>
           <a href="/peta">Kembali ke peta</a>
         </div>
@@ -88,27 +89,30 @@ export function ImporPage() {
   return (
     <div className="impor">
       <div className="impor-card">
-        <h1>Impor data</h1>
+        <h2 className="impor-judul">Unggah berkas</h2>
         <p>Unggah berkas KML atau KMZ, periksa laporan, lalu simpan ke unit SPAM yang dipilih.</p>
 
+        <Combobox
+          id="impor-unit"
+          label="Unit SPAM tujuan"
+          placeholder="Cari nama unit…"
+          emptyText="Belum ada unit SPAM."
+          options={units.map((n) => ({ value: String(n.id), label: n.nama }))}
+          value={networkId === null ? '' : String(networkId)}
+          onChange={(v) => { setNetworkId(v === '' ? null : Number(v)); setStaged(null) }}
+        />
         <div className="impor-field">
-          <label htmlFor="impor-unit">Unit SPAM tujuan</label>
-          <select id="impor-unit" value={networkId ?? ''} onChange={(e) => { setNetworkId(e.target.value === '' ? null : Number(e.target.value)); setStaged(null) }}>
-            <option value="">Pilih unit</option>
-            {units.map((n) => <option key={n.id} value={n.id}>{n.nama}</option>)}
-          </select>
-        </div>
-        <div className="impor-field">
-          <label htmlFor="impor-pekerjaan">Paket pekerjaan (opsional)</label>
-          <select
+          <Combobox
             id="impor-pekerjaan"
-            value={pekerjaanId}
+            label="Paket pekerjaan (opsional)"
+            placeholder="Cari nama paket…"
+            kosongLabel="Tanpa paket"
+            emptyText={pekerjaan.isError ? 'Daftar paket belum bisa dimuat.' : 'Tidak ada paket yang cocok.'}
             disabled={pekerjaan.isPending}
-            onChange={(e) => { setPekerjaanId(e.target.value); setStaged(null) }}
-          >
-            <option value="">Tanpa paket</option>
-            {(pekerjaan.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.nama_paket} ({p.tahun})</option>)}
-          </select>
+            options={(pekerjaan.data ?? []).map((p) => ({ value: String(p.id), label: p.nama_paket ?? `Paket ${p.id}`, hint: `TA ${p.tahun}` }))}
+            value={pekerjaanId}
+            onChange={(v) => { setPekerjaanId(v); setStaged(null) }}
+          />
           {pekerjaan.isError && <small className="impor-muted">Daftar paket belum bisa dimuat. Impor tetap bisa dilakukan tanpa paket.</small>}
         </div>
         <div className="impor-field">
