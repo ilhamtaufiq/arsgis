@@ -25,6 +25,9 @@ pub use om_riwayat::{OmAset, RiwayatOm};
 pub use perawatan::{JadwalBaru, JadwalPerawatan, JatuhTempoBaris, Perbaikan, PerbaikanBaru};
 pub use rehab::{AsetRehab, BarisPrioritas};
 
+#[cfg(test)]
+mod om_tests;
+
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 /// Batas jumlah fitur per permintaan. Di atas ini, gunakan vector tiles (fase lanjutan).
