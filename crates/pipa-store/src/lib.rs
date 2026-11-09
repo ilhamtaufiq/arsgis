@@ -3,6 +3,7 @@
 use pipa_core::{catalog_roles, Bbox, FeatureType, Role};
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::Row;
+use serde_json::json;
 use thiserror::Error;
 
 mod aset;
@@ -14,6 +15,12 @@ mod pokmas;
 pub use pokmas::{
     efektifkan, PokmasDetail, PokmasEfektif, PokmasInput, PokmasIsian, PokmasOverride, SumberPokmas,
 };
+
+mod cakupan;
+pub use cakupan::{CakupanDesa, DusunCakupan, DusunRow, DusunTulis, SetDusunHasil};
+
+mod pelanggan;
+pub use pelanggan::{FilterPelanggan, PelangganRow, PelangganTulis, SrPilihan};
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
@@ -129,6 +136,12 @@ pub struct FeatureRow {
     pub elevasi_m: Option<f64>,
     pub tahun_bangun: Option<i16>,
     pub sumber_dana: Option<String>,
+    /// Kode aset unik, dibuat trigger database (migrasi 0014).
+    pub kode_aset: String,
+    /// Dusun titik SR. Selalu None untuk jenis selain sr.
+    pub dusun_id: Option<i64>,
+    /// Hanya terisi untuk jenis sr: true bila SR punya pelanggan aktif. None untuk jenis lain.
+    pub terlayani: Option<bool>,
     pub geometry: serde_json::Value,
 }
 
@@ -143,6 +156,12 @@ impl Store {
             .max_connections(10)
             .connect(database_url)
             .await?;
+        Ok(Self { pool })
+    }
+
+    /// Store dengan pool yang koneksinya baru dibuka saat pertama dipakai. Untuk pengujian yang tidak menyentuh database.
+    pub fn connect_lazy(database_url: &str) -> Result<Self, StoreError> {
+        let pool = PgPoolOptions::new().max_connections(1).connect_lazy(database_url)?;
         Ok(Self { pool })
     }
 
@@ -281,6 +300,10 @@ impl Store {
                     kondisi, status, fungsi, \
                     kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
                     elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, \
+                    kode_aset, dusun_id, \
+                    CASE WHEN feature_type = 'sr' THEN EXISTS ( \
+                        SELECT 1 FROM pelanggan p WHERE p.sr_feature_id = features.id AND p.status = 'aktif' \
+                    ) END AS terlayani, \
                     ST_AsGeoJSON(geom)::text AS geometry \
              FROM features \
              WHERE ($1::bigint IS NULL OR network_id = $1) \
@@ -307,6 +330,29 @@ impl Store {
     }
 }
 
+/// Keadaan koreksi Pokmas yang akan diganti, dibaca dengan kunci baris. None bila belum ada koreksi.
+async fn pokmas_snapshot_terkini(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    desa_id: i64,
+) -> Result<Option<serde_json::Value>, StoreError> {
+    let row = sqlx::query(
+        "SELECT nama, perdes, kepala, bendahara, sekretaris, catatan FROM pokmas_override \
+         WHERE desa_id = $1 FOR UPDATE",
+    )
+    .bind(desa_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(r) = row else { return Ok(None) };
+    Ok(Some(serde_json::json!({
+        "nama": r.get::<String, _>("nama"),
+        "perdes": r.get::<Option<String>, _>("perdes"),
+        "kepala": r.get::<Option<String>, _>("kepala"),
+        "bendahara": r.get::<Option<String>, _>("bendahara"),
+        "sekretaris": r.get::<Option<String>, _>("sekretaris"),
+        "catatan": r.get::<Option<String>, _>("catatan"),
+    })))
+}
+
 fn feature_from_row(r: &PgRow) -> Result<FeatureRow, StoreError> {
     let geometry_text: String = r.try_get("geometry")?;
     let geometry = serde_json::from_str(&geometry_text)
@@ -327,6 +373,9 @@ fn feature_from_row(r: &PgRow) -> Result<FeatureRow, StoreError> {
         elevasi_m: r.try_get("elevasi_m")?,
         tahun_bangun: r.try_get("tahun_bangun")?,
         sumber_dana: r.try_get("sumber_dana")?,
+        kode_aset: r.try_get("kode_aset")?,
+        dusun_id: r.try_get("dusun_id")?,
+        terlayani: r.try_get("terlayani")?,
         geometry,
     })
 }
@@ -1071,12 +1120,15 @@ impl Store {
     }
 
     /// Simpan koreksi Pokmas (insert atau ganti). False bila desa tidak ada atau tidak aktif.
+    /// Keadaan sebelum dan sesudah ditulis ke `pokmas_riwayat` dalam transaksi yang sama.
     pub async fn simpan_pokmas_koreksi(
         &self,
         desa_id: i64,
         isian: &PokmasIsian,
         oleh: &str,
     ) -> Result<bool, StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let sebelum = pokmas_snapshot_terkini(&mut tx, desa_id).await?;
         let diperbarui = sqlx::query(
             "INSERT INTO pokmas_override (desa_id, nama, perdes, kepala, bendahara, sekretaris, catatan, \
                                           diperbarui_oleh, diperbarui_pada) \
@@ -1094,19 +1146,87 @@ impl Store {
         .bind(&isian.sekretaris)
         .bind(&isian.catatan)
         .bind(oleh)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
-        Ok(diperbarui > 0)
+        if diperbarui == 0 {
+            return Ok(false);
+        }
+        let sesudah = json!({
+            "nama": isian.nama,
+            "perdes": isian.perdes,
+            "kepala": isian.kepala,
+            "bendahara": isian.bendahara,
+            "sekretaris": isian.sekretaris,
+            "catatan": isian.catatan,
+        });
+        let aksi = if sebelum.is_some() { "ubah" } else { "tambah" };
+        sqlx::query(
+            "INSERT INTO pokmas_riwayat (desa_id, aksi, diubah_oleh, sebelum, sesudah) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(desa_id)
+        .bind(aksi)
+        .bind(oleh)
+        .bind(sebelum)
+        .bind(sesudah)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(true)
     }
 
     /// Hapus koreksi Pokmas sehingga desa kembali ke data Arumanis. Tanpa efek bila tidak ada koreksi.
-    pub async fn hapus_pokmas_koreksi(&self, desa_id: i64) -> Result<(), StoreError> {
+    /// Bila ada koreksi yang dihapus, isinya tercatat di `pokmas_riwayat` sebagai aksi 'hapus'.
+    pub async fn hapus_pokmas_koreksi(&self, desa_id: i64, oleh: &str) -> Result<(), StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let Some(sebelum) = pokmas_snapshot_terkini(&mut tx, desa_id).await? else {
+            return Ok(());
+        };
         sqlx::query("DELETE FROM pokmas_override WHERE desa_id = $1")
             .bind(desa_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        sqlx::query(
+            "INSERT INTO pokmas_riwayat (desa_id, aksi, diubah_oleh, sebelum) VALUES ($1, 'hapus', $2, $3)",
+        )
+        .bind(desa_id)
+        .bind(oleh)
+        .bind(sebelum)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         Ok(())
+    }
+
+    /// Riwayat koreksi Pokmas satu desa, terbaru di atas. None bila desa tidak ada.
+    /// Isi `sebelum` dan `sesudah` berbentuk isian Pokmas (nama, perdes, pengurus, catatan).
+    pub async fn riwayat_pokmas(&self, desa_id: i64) -> Result<Option<Vec<RiwayatAset>>, StoreError> {
+        let ada: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM ref_desa WHERE id = $1)")
+            .bind(desa_id)
+            .fetch_one(&self.pool)
+            .await?;
+        if !ada {
+            return Ok(None);
+        }
+        let rows = sqlx::query(
+            "SELECT aksi, diubah_oleh, to_char(diubah_pada, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS diubah_pada, \
+                    sebelum, sesudah \
+             FROM pokmas_riwayat WHERE desa_id = $1 ORDER BY diubah_pada DESC, id DESC",
+        )
+        .bind(desa_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(Some(
+            rows.iter()
+                .map(|r| RiwayatAset {
+                    aksi: r.get("aksi"),
+                    diubah_oleh: r.get("diubah_oleh"),
+                    diubah_pada: r.get("diubah_pada"),
+                    sebelum: r.get("sebelum"),
+                    sesudah: r.get("sesudah"),
+                })
+                .collect(),
+        ))
     }
 
     /// True bila desa ada di referensi dan aktif.

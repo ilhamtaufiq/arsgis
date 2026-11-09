@@ -15,7 +15,7 @@ use crate::{Store, StoreError};
 /// Kolom fitur dalam urutan yang dibaca `fitur_dari_baris`. Geometri diambil sebagai GeoJSON.
 const FITUR_COLS: &str = "id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, kondisi, \
     status, fungsi, kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
-    elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, ST_AsGeoJSON(geom)::text AS geometry";
+    elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, kode_aset, ST_AsGeoJSON(geom)::text AS geometry";
 
 /// Satu fitur lengkap dengan atributnya, seperti yang tersimpan di database.
 #[derive(Debug, Clone)]
@@ -23,6 +23,8 @@ pub struct FiturLengkap {
     pub id: i64,
     pub network_id: i64,
     pub feature_type: String,
+    /// Kode aset unik, tidak pernah berubah setelah dibuat.
+    pub kode_aset: String,
     pub geometry: Value,
     pub fungsi: Option<String>,
     pub atribut: AtributAset,
@@ -85,6 +87,7 @@ pub fn fitur_geojson(f: &FiturLengkap) -> Value {
             "elevasi_m": a.elevasi_m,
             "tahun_bangun": a.tahun_bangun,
             "sumber_dana": a.sumber_dana,
+            "kode_aset": f.kode_aset,
         },
     })
 }
@@ -96,6 +99,7 @@ fn fitur_dari_baris(r: &PgRow) -> Result<FiturLengkap, StoreError> {
         id: r.try_get("id")?,
         network_id: r.try_get("network_id")?,
         feature_type: r.try_get("feature_type")?,
+        kode_aset: r.try_get("kode_aset")?,
         geometry,
         fungsi: r.try_get("fungsi")?,
         atribut: AtributAset {
@@ -221,6 +225,7 @@ impl Store {
             return Ok(TulisHasil::Ditolak(e));
         }
 
+        // kode_aset tidak diisi di sini. Trigger `features_isi_kode_aset` (migrasi 0014) membuatnya dalam statement ini.
         let row = sqlx::query(&format!(
             "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, material, tahun_pasang, \
                 kondisi, status, kapasitas_m3, debit_lps, elevasi_m, tahun_bangun, sumber_dana) \

@@ -230,6 +230,9 @@ async fn features_geojson(
                     "elevasi_m": f.elevasi_m,
                     "tahun_bangun": f.tahun_bangun,
                     "sumber_dana": f.sumber_dana,
+                    "kode_aset": f.kode_aset,
+                    "dusun_id": f.dusun_id,
+                    "terlayani": f.terlayani,
                 },
             })
         })
@@ -648,7 +651,7 @@ async fn hapus_desa_pokmas(
     if !state.store.desa_aktif(id).await? {
         return Err(desa_tidak_ditemukan());
     }
-    state.store.hapus_pokmas_koreksi(id).await?;
+    state.store.hapus_pokmas_koreksi(id, &me.username).await?;
     tracing::info!(user = %me.username, desa = id, "pokmas desa dikembalikan ke data arumanis");
     Ok(StatusCode::NO_CONTENT.into_response())
 }

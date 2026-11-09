@@ -306,7 +306,7 @@ mod db_tests {
         assert!(daftar.iter().find(|d| d.id == 2).unwrap().punya_pokmas);
 
         // Hapus koreksi: kembali ke data sinkron (yang sudah kosong untuk desa 1).
-        store.hapus_pokmas_koreksi(1).await.unwrap();
+        store.hapus_pokmas_koreksi(1, "editor1").await.unwrap();
         let d = store.pokmas_detail(1).await.unwrap().unwrap();
         assert_eq!(d.efektif.sumber, crate::SumberPokmas::Arumanis);
         assert!(d.efektif.pokmas.is_none());
