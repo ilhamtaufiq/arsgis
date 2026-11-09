@@ -13,6 +13,7 @@ import './aset.css'
 const JENIS_TITIK: { value: string; label: string }[] = [
   { value: 'sr', label: 'Sambungan rumah (sr)' },
   { value: 'tapping', label: 'Tapping pipa' },
+  { value: 'mata_air', label: 'Mata air' },
   { value: 'valve', label: 'Valve' },
   { value: 'reservoir', label: 'Reservoir' },
   { value: 'bronkaptering', label: 'Bronkaptering' },

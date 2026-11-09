@@ -10,6 +10,7 @@ export const LAYER_LABELS: Record<Exclude<FeatureType, 'pipa'>, string> = {
   reservoir: 'Reservoir',
   sr: 'Sambungan rumah',
   bronkaptering: 'Bronkaptering',
+  mata_air: 'Mata air',
   ...ASET_LABEL,
 }
 
@@ -19,8 +20,8 @@ export const PIPE_LABELS: Record<PipeFunction, string> = {
 }
 
 // Semua layer aktif. Sambungan rumah (sr) hanya ikut diminta untuk editor dan admin (lihat App).
-// Tapping bukan data pelanggan, jadi tampil untuk semua pengunjung seperti valve dan reservoir.
-export const DEFAULT_LAYERS: FeatureType[] = ['tapping', 'valve', 'reservoir', 'bronkaptering', 'sr']
+// Tapping dan mata air bukan data pelanggan, jadi tampil untuk semua pengunjung seperti valve dan reservoir.
+export const DEFAULT_LAYERS: FeatureType[] = ['tapping', 'mata_air', 'valve', 'reservoir', 'bronkaptering', 'sr']
 export const DEFAULT_PIPE_FUNCTIONS: PipeFunction[] = ['transmisi', 'distribusi']
 
 /**
