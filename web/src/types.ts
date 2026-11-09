@@ -43,6 +43,9 @@ export type FeatureProperties = {
   kode_aset?: string | null
   dusun_id?: number | null
   terlayani?: boolean | null
+  // Paket pekerjaan asal aset. Null bila aset tidak terkait paket.
+  pekerjaan_id?: number | null
+  pekerjaan_nama?: string | null
 }
 
 export type PipeFeature = Feature<Geometry, FeatureProperties> & { id: number }

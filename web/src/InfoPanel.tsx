@@ -42,6 +42,7 @@ export function InfoPanel({ feature, onClose, bolehEdit = false }: Props) {
           </div>
         ))}
       </dl>
+      {p.pekerjaan_nama && <p className="info-pekerjaan">Paket pekerjaan: {p.pekerjaan_nama}</p>}
       {bolehEdit && <AsetAksi key={feature.id} feature={feature} />}
       {p.feature_type !== 'sr' && <OmAsetPanel key={`om-${feature.id}`} featureId={feature.id} kondisi={p.kondisi} />}
     </aside>

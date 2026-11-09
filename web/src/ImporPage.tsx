@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { canSeeCustomerData, fetchMe, fetchNetworks } from './api'
 import { commitImport, uploadKml, type StagedImport } from './importApi'
+import { pesanDuplikat, pesanGalatSimpan } from './importLogic'
+import { fetchPekerjaan } from './pekerjaanApi'
 import { LABEL_JENIS } from './asetForm'
+import { ImporDaftar } from './ImporDaftar'
+import { PanelAsetTerhapus } from './AsetTerhapus'
 import type { FeatureType } from './types'
 import './aset.css'
 
@@ -13,20 +17,25 @@ const JENIS_TITIK: { value: string; label: string }[] = [
   { value: 'bronkaptering', label: 'Bronkaptering' },
 ]
 
-/** Halaman impor KML atau KMZ untuk editor dan admin: pilih unit, unggah, pratinjau laporan, lalu simpan. */
+/** Halaman impor KML atau KMZ untuk editor dan admin: pilih unit dan paket, unggah, pratinjau laporan, lalu simpan. Di bawahnya ada riwayat impor dan aset terhapus. */
 export function ImporPage() {
+  const qc = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  const allowed = canSeeCustomerData(me.data ?? null)
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
+  const pekerjaan = useQuery({ queryKey: ['pekerjaan'], queryFn: fetchPekerjaan, enabled: allowed })
   const [networkId, setNetworkId] = useState<number | null>(null)
+  const [pekerjaanId, setPekerjaanId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [titik, setTitik] = useState('sr')
   const [staged, setStaged] = useState<StagedImport | null>(null)
+  const [izinkanGanda, setIzinkanGanda] = useState(false)
   const [pesan, setPesan] = useState<string | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
   const [sibuk, setSibuk] = useState(false)
 
   if (me.isPending) return null
-  if (!canSeeCustomerData(me.data ?? null)) {
+  if (!allowed) {
     return (
       <div className="impor">
         <div className="impor-card">
@@ -45,8 +54,9 @@ export function ImporPage() {
     setSibuk(true)
     setGalat(null)
     setPesan(null)
+    setIzinkanGanda(false)
     try {
-      setStaged(await uploadKml(file, titik, networkId))
+      setStaged(await uploadKml(file, titik, networkId, pekerjaanId === '' ? null : Number(pekerjaanId)))
     } catch (err) {
       setStaged(null)
       setGalat((err as Error).message)
@@ -60,12 +70,15 @@ export function ImporPage() {
     setSibuk(true)
     setGalat(null)
     try {
-      const { ditulis, dilewati } = await commitImport(staged.id, networkId)
+      const { ditulis, dilewati } = await commitImport(staged.id, networkId, izinkanGanda)
       setPesan(`${ditulis} fitur disimpan${dilewati > 0 ? `, ${dilewati} dilewati karena di luar batas desa` : ''}.`)
       setStaged(null)
       setFile(null)
+      setIzinkanGanda(false)
+      qc.invalidateQueries({ queryKey: ['impor-daftar'] })
+      qc.invalidateQueries({ queryKey: ['features'] })
     } catch (err) {
-      setGalat((err as Error).message)
+      setGalat(pesanGalatSimpan(err))
     } finally {
       setSibuk(false)
     }
@@ -83,6 +96,19 @@ export function ImporPage() {
             <option value="">Pilih unit</option>
             {units.map((n) => <option key={n.id} value={n.id}>{n.nama}</option>)}
           </select>
+        </div>
+        <div className="impor-field">
+          <label htmlFor="impor-pekerjaan">Paket pekerjaan (opsional)</label>
+          <select
+            id="impor-pekerjaan"
+            value={pekerjaanId}
+            disabled={pekerjaan.isPending}
+            onChange={(e) => { setPekerjaanId(e.target.value); setStaged(null) }}
+          >
+            <option value="">Tanpa paket</option>
+            {(pekerjaan.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.nama_paket} ({p.tahun})</option>)}
+          </select>
+          {pekerjaan.isError && <small className="impor-muted">Daftar paket belum bisa dimuat. Impor tetap bisa dilakukan tanpa paket.</small>}
         </div>
         <div className="impor-field">
           <label htmlFor="impor-titik">Jenis titik</label>
@@ -108,6 +134,15 @@ export function ImporPage() {
 
         {staged && (
           <div className="impor-report" aria-label="Pratinjau impor">
+            {staged.duplikat && (
+              <div className="impor-peringatan" role="alert">
+                <p>{pesanDuplikat(staged.duplikat)}</p>
+                <label className="impor-cek">
+                  <input type="checkbox" checked={izinkanGanda} onChange={(e) => setIzinkanGanda(e.target.checked)} />
+                  Impor lagi walaupun ganda
+                </label>
+              </div>
+            )}
             <p>
               <strong>{staged.nama_file}</strong>: {staged.laporan.jumlah_fitur} fitur siap disimpan
               {staged.laporan.bukan_fitur > 0 && `, ${staged.laporan.bukan_fitur} gambar dilewati`}.
@@ -143,6 +178,9 @@ export function ImporPage() {
         {galat && <p role="alert" className="panel-error">{galat}</p>}
         {pesan && <p role="status">{pesan}</p>}
       </div>
+
+      <ImporDaftar />
+      <PanelAsetTerhapus />
     </div>
   )
 }
