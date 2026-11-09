@@ -39,6 +39,10 @@ export type FeatureProperties = {
   elevasi_m?: number | null
   tahun_bangun?: number | null
   sumber_dana?: string | null
+  // Dari migrasi 0013-0014. `terlayani` hanya ada untuk jenis sr dan hanya untuk peran internal.
+  kode_aset?: string | null
+  dusun_id?: number | null
+  terlayani?: boolean | null
 }
 
 export type PipeFeature = Feature<Geometry, FeatureProperties> & { id: number }

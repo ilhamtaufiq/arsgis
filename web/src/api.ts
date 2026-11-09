@@ -1,13 +1,27 @@
 import type { FeatureCollection } from 'geojson'
 import type { Bbox, Network, PipeFeature } from './types'
 
-export type Role = 'viewer' | 'editor' | 'admin'
+export type Role = 'viewer' | 'kepala_desa' | 'bendahara' | 'editor' | 'admin'
 
 export type User = { username: string; role: Role }
 
-/** Editor dan admin boleh melihat data pelanggan (sr). */
+/** Label peran untuk tampilan. Nilai `editor` ditampilkan sebagai operator/teknisi. */
+export const ROLE_LABEL: Record<Role, string> = {
+  viewer: 'Viewer',
+  kepala_desa: 'Kepala desa',
+  bendahara: 'Bendahara',
+  editor: 'Operator/teknisi',
+  admin: 'Admin',
+}
+
+/** Editor dan admin: boleh melihat sekaligus mengubah data pelanggan (sr) dan aset. Dipakai untuk membuka panel edit. */
 export function canSeeCustomerData(user: User | null): boolean {
   return user?.role === 'editor' || user?.role === 'admin'
+}
+
+/** Boleh membaca daftar dan detail pelanggan. Bendahara ikut, tetapi tidak mengubah. */
+export function canReadPelanggan(user: User | null): boolean {
+  return canSeeCustomerData(user) || user?.role === 'bendahara'
 }
 
 export async function fetchMe(): Promise<User | null> {
@@ -47,7 +61,7 @@ export async function fetchFeatures(networkId: number | null, bbox: Bbox, types:
   if (types.length) params.set('types', types.join(','))
   const base = networkId === null ? '/api/v1/features/geojson' : `/api/v1/networks/${networkId}/geojson`
   const res = await fetch(`${base}?${params}`, { signal })
-  if (res.status === 403) throw new Error('Akses ke data ini butuh peran editor atau admin.')
+  if (res.status === 403) throw new Error('Akses ke data ini butuh peran operator atau admin.')
   if (res.status === 422) throw new Error('Area terlalu banyak fitur. Perkecil area peta.')
   if (!res.ok) throw new Error(`Data fitur gagal dimuat (${res.status})`)
   const body = (await res.json()) as FeatureCollection

@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 type AdminUser = { id: number; username: string; role: Role; active: boolean; created_at: string }
 type AdminImport = { id: number; nama_file: string; status: string; network_id: number | null; dibuat_oleh: string; jumlah_fitur: number | null; waktu: string }
 
-const ROLES: Role[] = ['viewer', 'editor', 'admin']
+const ROLES: Role[] = ['viewer', 'kepala_desa', 'bendahara', 'editor', 'admin']
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {

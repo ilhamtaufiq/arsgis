@@ -36,7 +36,7 @@ function pipeWeight(diameterMm: number | null) {
   return Math.min(6, Math.max(1.5, 1.5 + ((d - 15) * 4.5) / 135))
 }
 
-function pointStyle(type: string): L.CircleMarkerOptions {
+function pointStyle(type: string, terlayani?: boolean | null): L.CircleMarkerOptions {
   switch (type) {
     case 'valve':
       return { radius: 6, color: '#111111', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }
@@ -58,7 +58,9 @@ function pointStyle(type: string): L.CircleMarkerOptions {
     case 'meter_induk':
       return { radius: 6, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.meter_induk, fillOpacity: 1 }
     default:
-      // Sambungan rumah (sr)
+      // Sambungan rumah (sr). Warna menunjukkan cakupan: hijau sudah terlayani, kuning belum.
+      if (terlayani === true) return { radius: 4, stroke: false, fillColor: '#16a34a', fillOpacity: 1 }
+      if (terlayani === false) return { radius: 4.5, color: '#713f12', weight: 0.8, fillColor: '#facc15', fillOpacity: 1 }
       return { radius: 4, stroke: false, fillColor: '#a16207', fillOpacity: 1 }
   }
 }
@@ -117,7 +119,10 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
           lineJoin: 'round',
         }
       },
-      pointToLayer: (feature, latlng) => L.circleMarker(latlng, pointStyle((feature as PipeFeature).properties.feature_type)),
+      pointToLayer: (feature, latlng) => {
+        const p = (feature as PipeFeature).properties
+        return L.circleMarker(latlng, pointStyle(p.feature_type, p.terlayani))
+      },
       onEachFeature: (feature, l) => {
         l.on('click', (e) => {
           // Saat menambah pipa, klik pada pipa yang ada dipakai sebagai titik jalur baru, jadi diteruskan ke peta.

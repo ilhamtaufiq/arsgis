@@ -13,6 +13,7 @@ const DashboardPage = lazy(() => import('./Dashboard').then((m) => ({ default: m
 const AdminPage = lazy(() => import('./Admin').then((m) => ({ default: m.AdminPage })))
 const ImporPage = lazy(() => import('./ImporPage').then((m) => ({ default: m.ImporPage })))
 const DesaDetailPage = lazy(() => import('./DesaDetailPage').then((m) => ({ default: m.DesaDetailPage })))
+const PelangganPage = lazy(() => import('./pelanggan/PelangganPage').then((m) => ({ default: m.PelangganPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
@@ -37,6 +38,10 @@ createRoot(document.getElementById('root')!).render(
           </LoginGate>
         ) : /^\/desa\/\d+$/.test(path) ? (
           <DesaDetailPage id={Number(path.split('/')[2])} />
+        ) : path === '/pelanggan' ? (
+          <LoginGate judul="Pelanggan dan cakupan">
+            <PelangganPage />
+          </LoginGate>
         ) : path === '/impor' ? (
           <LoginGate judul="Impor KML">
             <ImporPage />
