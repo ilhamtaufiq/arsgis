@@ -282,6 +282,8 @@ struct UploadParams {
 #[derive(Deserialize)]
 struct CommitParams {
     network_id: i64,
+    /// True bila berkas yang sama dengan batch committed sebelumnya memang akan diimpor lagi.
+    izinkan_ganda: Option<bool>,
 }
 
 async fn upload_import(
@@ -335,9 +337,13 @@ async fn upload_import(
         })
         .collect();
     let nama_file = params.nama_file.unwrap_or_else(|| "impor.kml".into());
+    // Hash dari bytes asli berkas. Berkas yang sudah pernah di-commit hanya diberi tahu, tetap disimpan sebagai staged.
+    let hash = pipa_import::sha256_hex(&body);
+    let kandidat = state.store.batch_committed_dengan_hash(&hash).await?;
+    let duplikat = pipa_core::impor::cari_duplikat(&hash, None, &kandidat).map(duplikat_json);
     let id = state
         .store
-        .create_batch(&nama_file, &laporan, &user.username, network_id, &rows)
+        .create_batch(&nama_file, &laporan, &user.username, network_id, &hash, &rows)
         .await?;
     let batch = state
         .store
@@ -345,7 +351,18 @@ async fn upload_import(
         .await?
         .ok_or_else(|| internal("batch hilang sesaat setelah dibuat"))?;
 
-    Ok((StatusCode::CREATED, Json(json!({ "id": id, "status": "staged", "nama_file": nama_file, "network_id": network_id, "laporan": batch.laporan }))).into_response())
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "id": id,
+            "status": "staged",
+            "nama_file": nama_file,
+            "network_id": network_id,
+            "laporan": batch.laporan,
+            "duplikat": duplikat,
+        })),
+    )
+        .into_response())
 }
 
 async fn get_import(State(state): State<AppState>, _: Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
@@ -364,27 +381,45 @@ async fn get_import(State(state): State<AppState>, _: Editor, Path(id): Path<i64
     })))
 }
 
+/// Bentuk JSON `duplikat` pada respons upload dan commit.
+fn duplikat_json(k: &pipa_core::impor::KandidatDuplikat) -> Value {
+    json!({ "batch_id": k.batch_id, "nama_file": k.nama_file, "created_at": k.created_at })
+}
+
 async fn commit_import(
     State(state): State<AppState>,
     _: Editor,
     Path(id): Path<i64>,
     Query(params): Query<CommitParams>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     let networks = state.store.list_networks().await?;
     if !networks.iter().any(|n| n.id == params.network_id) {
         return Err(ApiError(StatusCode::BAD_REQUEST, "jaringan tidak ditemukan".into()));
     }
-    match state.store.commit_batch(id, params.network_id).await? {
+    let izinkan_ganda = params.izinkan_ganda.unwrap_or(false);
+    match state.store.commit_batch(id, params.network_id, izinkan_ganda).await? {
         CommitOutcome::Committed { ditulis, dilewati } => Ok(Json(json!({
             "id": id,
             "status": "committed",
             "fitur_ditulis": ditulis,
             "fitur_dilewati": dilewati,
-        }))),
+        }))
+        .into_response()),
         CommitOutcome::NetworkMismatch => Err(bad_request("jaringan tidak sama dengan tujuan batch impor")),
         CommitOutcome::NotFound => Err(ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into())),
         CommitOutcome::AlreadyCommitted => Err(ApiError(StatusCode::CONFLICT, "batch sudah di-commit".into())),
         CommitOutcome::Dibatalkan => Err(ApiError(StatusCode::CONFLICT, "batch impor sudah dibatalkan".into())),
+        CommitOutcome::Duplikat(k) => Ok((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": format!(
+                    "berkas ini sama dengan batch impor #{} ({}) yang sudah di-commit. Kirim izinkan_ganda=true bila memang ingin mengimpor lagi.",
+                    k.batch_id, k.nama_file
+                ),
+                "duplikat": duplikat_json(&k),
+            })),
+        )
+            .into_response()),
     }
 }
 

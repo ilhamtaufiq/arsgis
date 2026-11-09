@@ -20,6 +20,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 argon2 = { version = "0.5", features = ["std"] }
 jsonwebtoken = { version = "9", default-features = false }
+sha2 = "0.10"
 
 pipa-core = { path = "crates/pipa-core" }
 pipa-store = { path = "crates/pipa-store" }

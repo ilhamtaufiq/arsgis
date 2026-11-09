@@ -10,5 +10,6 @@ pipa-core = { workspace = true }
 quick-xml = "0.37"
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+sha2 = { workspace = true }
 # KMZ = zip berisi doc.kml. Hanya baca, jadi cukup deflate.
 zip = { version = "2", default-features = false, features = ["deflate"] }

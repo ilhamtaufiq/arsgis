@@ -10,6 +10,7 @@ mod aset;
 mod catalog_input;
 mod impor_kelola;
 pub use impor_kelola::BatalHasil;
+use pipa_core::impor::KandidatDuplikat;
 pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, PulihHasil, RiwayatAset, TerhapusRow, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
 
@@ -467,6 +468,8 @@ pub enum CommitOutcome {
     AlreadyCommitted,
     Dibatalkan,
     NetworkMismatch,
+    /// Berkas dengan hash yang sama sudah pernah di-commit, dan `izinkan_ganda` tidak diminta.
+    Duplikat(KandidatDuplikat),
 }
 
 impl Store {
@@ -477,16 +480,19 @@ impl Store {
         laporan: &serde_json::Value,
         dibuat_oleh: &str,
         network_id: i64,
+        file_sha256: &str,
         rows: &[StagingRow],
     ) -> Result<i64, StoreError> {
         let mut tx = self.pool.begin().await?;
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh, network_id) VALUES ($1, $2, $3, $4) RETURNING id",
+            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh, network_id, file_sha256) \
+             VALUES ($1, $2, $3, $4, $5) RETURNING id",
         )
         .bind(nama_file)
         .bind(laporan)
         .bind(dibuat_oleh)
         .bind(network_id)
+        .bind(file_sha256)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -558,14 +564,15 @@ impl Store {
 
     /// Pindahkan fitur staging yang berada di dalam batas ke `features`. Fitur di luar batas dilewati.
     /// Batch yang sudah di-commit tidak bisa diulang, dan `network_id` harus sama dengan unit batch.
-    pub async fn commit_batch(&self, id: i64, network_id: i64) -> Result<CommitOutcome, StoreError> {
+    pub async fn commit_batch(&self, id: i64, network_id: i64, izinkan_ganda: bool) -> Result<CommitOutcome, StoreError> {
         let mut tx = self.pool.begin().await?;
-        let batch: Option<(String, Option<i64>)> =
-            sqlx::query_as("SELECT status, network_id FROM import_batches WHERE id = $1 FOR UPDATE")
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        let Some((status, batch_network)) = batch else {
+        let batch: Option<(String, Option<i64>, Option<String>)> = sqlx::query_as(
+            "SELECT status, network_id, file_sha256 FROM import_batches WHERE id = $1 FOR UPDATE",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((status, batch_network, file_sha256)) = batch else {
             return Ok(CommitOutcome::NotFound);
         };
         if status == "committed" {
@@ -576,6 +583,13 @@ impl Store {
         }
         if batch_network != Some(network_id) {
             return Ok(CommitOutcome::NetworkMismatch);
+        }
+        // Berkas yang sama tidak diimpor dua kali tanpa persetujuan eksplisit (izinkan_ganda).
+        if let (false, Some(hash)) = (izinkan_ganda, file_sha256.as_deref()) {
+            let kandidat = impor_kelola::kandidat_hash(&mut *tx, hash).await?;
+            if let Some(dup) = pipa_core::impor::cari_duplikat(hash, Some(id), &kandidat) {
+                return Ok(CommitOutcome::Duplikat(dup.clone()));
+            }
         }
 
         let result = sqlx::query(

@@ -79,28 +79,37 @@ impl Store {
 
     /// Batch committed yang berkas aslinya ber-hash `hash`, urut id menaik. Dipakai untuk mendeteksi impor ganda.
     pub async fn batch_committed_dengan_hash(&self, hash: &str) -> Result<Vec<KandidatDuplikat>, StoreError> {
-        let rows = sqlx::query(
-            "SELECT id, nama_file, file_sha256, to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS created_at \
-             FROM import_batches WHERE status = 'committed' AND file_sha256 = $1 ORDER BY id",
-        )
-        .bind(hash)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .iter()
-            .map(|r| KandidatDuplikat {
-                batch_id: r.get("id"),
-                nama_file: r.get("nama_file"),
-                created_at: r.get("created_at"),
-                file_sha256: r.get("file_sha256"),
-            })
-            .collect())
+        kandidat_hash(&self.pool, hash).await
     }
+}
+
+/// Kandidat duplikat dari database. Dipisah agar bisa dijalankan di dalam transaksi commit.
+pub(crate) async fn kandidat_hash<'c>(
+    exec: impl sqlx::PgExecutor<'c>,
+    hash: &str,
+) -> Result<Vec<KandidatDuplikat>, StoreError> {
+    let rows = sqlx::query(
+        "SELECT id, nama_file, file_sha256, to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS created_at \
+         FROM import_batches WHERE status = 'committed' AND file_sha256 = $1 ORDER BY id",
+    )
+    .bind(hash)
+    .fetch_all(exec)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| KandidatDuplikat {
+            batch_id: r.get("id"),
+            nama_file: r.get("nama_file"),
+            created_at: r.get("created_at"),
+            file_sha256: r.get("file_sha256"),
+        })
+        .collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CommitOutcome;
     use sqlx::PgPool;
 
     /// Jaringan, satu batch (committed atau staged), dan `jumlah` fitur yang menempel pada batch itu.
@@ -209,5 +218,72 @@ mod tests {
     async fn impor_batal_batch_tidak_ada(pool: PgPool) {
         let store = Store::from_pool(pool);
         assert_eq!(store.batalkan_impor(999_999, "operator").await.unwrap(), BatalHasil::TidakAda);
+    }
+
+    /// Batch dengan hash berkas tertentu dan satu baris staging yang berada di dalam batas.
+    async fn batch_berhash(pool: &PgPool, network: i64, status: &str, hash: &str) -> i64 {
+        let batch: i64 = sqlx::query_scalar(
+            "INSERT INTO import_batches (nama_file, status, network_id, laporan, dibuat_oleh, file_sha256) \
+             VALUES ('uji.kml', $1, $2, '{}', 'operator', $3) RETURNING id",
+        )
+        .bind(status)
+        .bind(network)
+        .bind(hash)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO import_staging (batch_id, feature_type, nama, geom, dalam_batas) \
+             VALUES ($1, 'sr', 'Rumah', ST_SetSRID(ST_MakePoint(107.1, -6.8), 4326), true)",
+        )
+        .bind(batch)
+        .execute(pool)
+        .await
+        .unwrap();
+        batch
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn impor_commit_berkas_ganda_butuh_izinkan_ganda(pool: PgPool) {
+        let network: i64 = sqlx::query_scalar("INSERT INTO networks (nama) VALUES ('uji') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let pertama = batch_berhash(&pool, network, "committed", "h1").await;
+        let kedua = batch_berhash(&pool, network, "staged", "h1").await;
+        let store = Store::from_pool(pool.clone());
+
+        match store.commit_batch(kedua, network, false).await.unwrap() {
+            CommitOutcome::Duplikat(k) => assert_eq!(k.batch_id, pertama),
+            hasil => panic!("seharusnya Duplikat, hasil: {hasil:?}"),
+        }
+        let masih_staged: String = sqlx::query_scalar("SELECT status FROM import_batches WHERE id = $1")
+            .bind(kedua)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(masih_staged, "staged", "commit yang ditolak tidak boleh mengubah status");
+
+        assert_eq!(
+            store.commit_batch(kedua, network, true).await.unwrap(),
+            CommitOutcome::Committed { ditulis: 1, dilewati: 0 }
+        );
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn impor_commit_berkas_berbeda_tidak_dianggap_ganda(pool: PgPool) {
+        let network: i64 = sqlx::query_scalar("INSERT INTO networks (nama) VALUES ('uji') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        batch_berhash(&pool, network, "committed", "h1").await;
+        let baru = batch_berhash(&pool, network, "staged", "h2").await;
+        let store = Store::from_pool(pool);
+        assert_eq!(
+            store.commit_batch(baru, network, false).await.unwrap(),
+            CommitOutcome::Committed { ditulis: 1, dilewati: 0 }
+        );
     }
 }

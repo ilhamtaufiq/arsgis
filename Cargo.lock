@@ -1221,6 +1221,7 @@ dependencies = [
  "pipa-core",
  "quick-xml",
  "serde_json",
+ "sha2",
  "thiserror",
  "zip",
 ]

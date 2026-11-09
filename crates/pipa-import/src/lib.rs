@@ -26,6 +26,13 @@ const MAX_KML_BYTES: usize = 50 * 1024 * 1024;
 
 /// Teks KML dari berkas unggahan. KMZ (zip) dikenali dari awalan `PK\x03\x04` dan dibuka: dipakai `doc.kml`,
 /// atau berkas `.kml` pertama bila namanya lain. Selain itu berkas dianggap KML teks biasa.
+/// sha256 isi berkas dalam hex huruf kecil. Dipakai untuk mencegah impor ganda; dihitung dari bytes asli
+/// (KML atau KMZ sebelum dibuka), bukan dari XML hasil ekstraksi.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 pub fn kml_text(bytes: &[u8]) -> Result<String, ImportError> {
     kml_text_limited(bytes, MAX_KML_BYTES)
 }
@@ -243,6 +250,16 @@ fn parse_coords(raw: &str) -> Vec<[f64; 2]> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sha256_hex_sesuai_vektor_uji() {
+        // Vektor uji standar FIPS 180-2 untuk "abc".
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(sha256_hex(b"").len(), 64);
+    }
+
     use super::*;
 
     const SAMPLE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
