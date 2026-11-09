@@ -5,6 +5,7 @@ import type { FeatureType } from './types'
 // Urutan tampil: jaringan dulu (pipa, valve, reservoir), lalu titik pelayanan, lalu aset baru.
 const URUTAN: FeatureType[] = [
   'pipa',
+  'tapping',
   'valve',
   'reservoir',
   'bronkaptering',
