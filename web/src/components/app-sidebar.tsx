@@ -1,4 +1,8 @@
-import { LayoutDashboard, Map as MapIcon, ShieldCheck, Wrench } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Map as MapIcon, LayoutDashboard, LogIn, ShieldCheck, Upload, Users, Wrench, type LucideIcon } from 'lucide-react'
+import { fetchMe } from '../api'
+import { itemAktif, menuUntukUser, type IdMenu } from '../shell/menu'
+import { Tautan, usePathname } from '../shell/navigasi'
 import {
   Sidebar,
   SidebarContent,
@@ -10,18 +14,25 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 
-const MENU = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Peta', href: '/peta', icon: MapIcon },
-  { title: 'O&M', href: '/om', icon: Wrench },
-  { title: 'Admin', href: '/admin', icon: ShieldCheck },
-]
+const IKON: Record<IdMenu, LucideIcon> = {
+  peta: MapIcon,
+  dashboard: LayoutDashboard,
+  pelanggan: Users,
+  om: Wrench,
+  impor: Upload,
+  admin: ShieldCheck,
+}
 
-/** Sidebar navigasi arsgis. Item aktif mengikuti path halaman. */
+/** Sidebar navigasi arsgis, dipakai di semua halaman yang memakai shell. Item mengikuti peran pengguna. */
 export function AppSidebar() {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  const path = usePathname()
+  const aktif = itemAktif(path)
+  const menu = menuUntukUser(me.data ?? null)
+  const { setOpenMobile, isMobile } = useSidebar()
 
   return (
     <Sidebar collapsible="icon">
@@ -35,18 +46,33 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {MENU.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={path === item.href} tooltip={item.title}>
-                    <a href={item.href}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {me.isPending ? null : menu.length === 0 ? (
+              <Tautan href="/masuk" className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:underline">
+                <LogIn className="size-4" aria-hidden="true" />
+                <span>Masuk untuk membuka menu</span>
+              </Tautan>
+            ) : (
+              <SidebarMenu>
+                {menu.map((item) => {
+                  const Ikon = IKON[item.id]
+                  return (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={aktif === item.id}
+                        tooltip={item.judul}
+                        onClick={() => { if (isMobile) setOpenMobile(false) }}
+                      >
+                        <Tautan href={item.href} aria-current={aktif === item.id ? 'page' : undefined}>
+                          <Ikon aria-hidden="true" />
+                          <span>{item.judul}</span>
+                        </Tautan>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
