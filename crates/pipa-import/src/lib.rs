@@ -203,6 +203,12 @@ fn jenis_titik(nama: Option<&str>) -> Option<FeatureType> {
         Some(FeatureType::Valve)
     } else if upper.contains("RESERVOIR") || words.contains(&"RV") {
         Some(FeatureType::Reservoir)
+    } else if words.contains(&"SR") || has_prefix("TAPPING") {
+        // "SR 1" dan titik tapping pipa adalah titik pengambilan air ke pelanggan.
+        Some(FeatureType::Sr)
+    } else if words.contains(&"SUMUR") {
+        // "Sumur Bor" adalah sumber air, dicatat sebagai intake.
+        Some(FeatureType::Intake)
     } else {
         None
     }
@@ -308,6 +314,18 @@ mod tests {
         assert_eq!(jenis_titik(Some("Broncap-1")), Some(FeatureType::Bronkaptering));
         assert_eq!(jenis_titik(Some("Reservoir utama")), Some(FeatureType::Reservoir));
         assert_eq!(jenis_titik(Some("valve induk")), Some(FeatureType::Valve));
+    }
+
+    #[test]
+    fn kmz_asbuilt_names_map_to_sr_and_intake() {
+        // Nama dari berkas as-built Babakan Sari: SR bernomor, tapping pipa, dan sumur bor.
+        assert_eq!(jenis_titik(Some("SR 1")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("SR 40")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("Tapping poin pipa 1.5 in")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("Tapping pipa 2 in babakansari")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("Sumur Bor Eksisting")), Some(FeatureType::Intake));
+        // Nama yang hanya mirip tidak ikut terklasifikasi.
+        assert_eq!(jenis_titik(Some("SRIGALA 3")), None);
     }
 
     #[test]
