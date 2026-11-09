@@ -18,7 +18,7 @@ const PERBAIKAN_COLS: &str = "p.id, p.feature_id, p.gangguan_id, to_char(p.tangg
     p.tindakan, p.teknisi, p.biaya::float8 AS biaya, p.catatan, p.dicatat_oleh, \
     to_char(p.dicatat_pada, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS dicatat_pada";
 
-const JADWAL_COLS: &str = "j.id, j.feature_id, j.jenis, j.interval_hari, \
+const JADWAL_COLS: &str = "j.id, j.feature_id, j.jenis, j.interval_hari::bigint AS interval_hari, \
     to_char(j.terakhir_dilakukan, 'YYYY-MM-DD') AS terakhir_dilakukan, \
     to_char(j.tanggal_berikutnya, 'YYYY-MM-DD') AS tanggal_berikutnya, j.aktif, j.diubah_oleh, \
     to_char(j.diubah_pada, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS diubah_pada";
@@ -327,7 +327,7 @@ impl Store {
     ) -> Result<Vec<JatuhTempoBaris>, StoreError> {
         let rows = sqlx::query(
             "SELECT j.id AS jadwal_id, f.id AS feature_id, f.feature_type, f.nama AS nama_aset, j.jenis, \
-                    j.interval_hari, to_char(j.terakhir_dilakukan, 'YYYY-MM-DD') AS terakhir_dilakukan, \
+                    j.interval_hari::bigint AS interval_hari, to_char(j.terakhir_dilakukan, 'YYYY-MM-DD') AS terakhir_dilakukan, \
                     to_char(j.tanggal_berikutnya, 'YYYY-MM-DD') AS tanggal_berikutnya \
              FROM jadwal_perawatan j JOIN features f ON f.id = j.feature_id \
              WHERE j.aktif AND f.network_id = $1 AND f.deleted_at IS NULL \
