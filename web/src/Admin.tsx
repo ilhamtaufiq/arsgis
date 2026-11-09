@@ -1,3 +1,4 @@
+import { labelStatusBatch } from './importLogic'
 import './preflight.css'
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -307,7 +308,7 @@ function ImportsTab() {
                   <TableCell className="text-right tabular-nums">{i.jumlah_fitur ?? '–'}</TableCell>
                   <TableCell>
                     <Badge variant={i.status === 'committed' ? 'default' : 'secondary'}>
-                      {i.status === 'committed' ? 'Disimpan' : 'Menunggu'}
+                      {labelStatusBatch(i.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{i.waktu}</TableCell>

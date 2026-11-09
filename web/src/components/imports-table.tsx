@@ -1,3 +1,4 @@
+import { labelStatusBatch } from '@/importLogic'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -35,7 +36,7 @@ export function ImportsTable({ rows }: { rows: Item[] }) {
                   <TableCell className="text-right tabular-nums">{i.jumlah_fitur ?? '–'}</TableCell>
                   <TableCell>
                     <Badge variant={i.status === 'committed' ? 'default' : 'secondary'}>
-                      {i.status === 'committed' ? 'Disimpan' : 'Menunggu'}
+                      {labelStatusBatch(i.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{i.waktu}</TableCell>
