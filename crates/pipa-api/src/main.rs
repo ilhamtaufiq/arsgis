@@ -26,8 +26,8 @@ use axum::{
 };
 use pipa_core::{can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Izin, Role};
 use pipa_store::{
-    fitur_geojson, AsetBaru, AsetUbah, CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput, Store,
-    StoreError, StagingRow, TulisHasil,
+    fitur_geojson, AsetBaru, AsetUbah, BatalHasil, CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput,
+    Store, StoreError, StagingRow, TulisHasil,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -384,6 +384,16 @@ async fn commit_import(
         CommitOutcome::NetworkMismatch => Err(bad_request("jaringan tidak sama dengan tujuan batch impor")),
         CommitOutcome::NotFound => Err(ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into())),
         CommitOutcome::AlreadyCommitted => Err(ApiError(StatusCode::CONFLICT, "batch sudah di-commit".into())),
+        CommitOutcome::Dibatalkan => Err(ApiError(StatusCode::CONFLICT, "batch impor sudah dibatalkan".into())),
+    }
+}
+
+/// Batalkan satu impor utuh. `dibatalkan` = jumlah fitur yang dihapus dari peta (0 untuk batch staged).
+async fn batal_import(State(state): State<AppState>, Editor(user): Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
+    match state.store.batalkan_impor(id, &user.username).await? {
+        BatalHasil::Berhasil { dibatalkan } => Ok(Json(json!({ "data": { "dibatalkan": dibatalkan } }))),
+        BatalHasil::TidakAda => Err(ApiError(StatusCode::NOT_FOUND, "batch impor tidak ditemukan".into())),
+        BatalHasil::SudahDibatalkan => Err(ApiError(StatusCode::CONFLICT, "batch impor sudah dibatalkan".into())),
     }
 }
 
@@ -830,6 +840,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/dashboard/kelengkapan", get(kelengkapan))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
+        .route("/api/v1/imports/{id}/batal", post(batal_import))
         .merge(pelanggan_routes::router())
         // Operasi dan pemeliharaan (Tahap C): gangguan, perbaikan, jadwal perawatan, dan rehabilitasi.
         .merge(om_routes::routes())

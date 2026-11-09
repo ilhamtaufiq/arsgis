@@ -8,6 +8,8 @@ use thiserror::Error;
 
 mod aset;
 mod catalog_input;
+mod impor_kelola;
+pub use impor_kelola::BatalHasil;
 pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, RiwayatAset, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
 
@@ -463,6 +465,7 @@ pub enum CommitOutcome {
     Committed { ditulis: u64, dilewati: i64 },
     NotFound,
     AlreadyCommitted,
+    Dibatalkan,
     NetworkMismatch,
 }
 
@@ -567,6 +570,9 @@ impl Store {
         };
         if status == "committed" {
             return Ok(CommitOutcome::AlreadyCommitted);
+        }
+        if status == "dibatalkan" {
+            return Ok(CommitOutcome::Dibatalkan);
         }
         if batch_network != Some(network_id) {
             return Ok(CommitOutcome::NetworkMismatch);

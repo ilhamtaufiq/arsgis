@@ -13,7 +13,7 @@ use sqlx::{Postgres, Row, Transaction};
 use crate::{Store, StoreError};
 
 /// Kolom fitur dalam urutan yang dibaca `fitur_dari_baris`. Geometri diambil sebagai GeoJSON.
-const FITUR_COLS: &str = "id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, kondisi, \
+pub(crate) const FITUR_COLS: &str = "id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, kondisi, \
     status, fungsi, kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
     elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, kode_aset, ST_AsGeoJSON(geom)::text AS geometry";
 
@@ -92,7 +92,7 @@ pub fn fitur_geojson(f: &FiturLengkap) -> Value {
     })
 }
 
-fn fitur_dari_baris(r: &PgRow) -> Result<FiturLengkap, StoreError> {
+pub(crate) fn fitur_dari_baris(r: &PgRow) -> Result<FiturLengkap, StoreError> {
     let geometry_text: String = r.try_get("geometry")?;
     let geometry = serde_json::from_str(&geometry_text).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     Ok(FiturLengkap {
