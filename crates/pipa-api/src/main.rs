@@ -1,6 +1,8 @@
 //! Server HTTP WebGIS perpipaan: API, autentikasi, dan penyajian frontend dari satu container.
 
 mod auth;
+mod otorisasi;
+mod pelanggan_routes;
 mod sync;
 
 use std::{
@@ -21,9 +23,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use pipa_core::{
-    can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Izin, Role,
-};
+use pipa_core::{can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Izin, Role};
 use pipa_store::{
     fitur_geojson, AsetBaru, AsetUbah, CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput, Store,
     StoreError, StagingRow, TulisHasil,
@@ -826,6 +826,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/dashboard/kelengkapan", get(kelengkapan))
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
+        .merge(pelanggan_routes::router())
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
         .nest_service("/basemap", ServeDir::new(basemap_dir))
         .fallback_service(spa)

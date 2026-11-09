@@ -23,7 +23,7 @@ pub struct Claims {
 }
 
 /// Pengguna yang sudah terautentikasi dari cookie sesi.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CurrentUser {
     pub username: String,
     pub role: Role,
