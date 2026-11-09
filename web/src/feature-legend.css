@@ -1,0 +1,21 @@
+/* Legenda jenis fitur. Mengikuti gaya .legend, tapi di kiri bawah yang paling bawah. */
+.feature-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  max-width: 220px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #1f2937;
+}
+.stage.has-panel .feature-legend { left: calc(var(--map-panel-width) + 16px); }
+.feature-legend summary { cursor: pointer; font-weight: 600; list-style: none; }
+.feature-legend summary::-webkit-details-marker { display: none; }
+.feature-legend ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.feature-legend li { display: flex; align-items: center; gap: 8px; }
+.feature-legend-garis { width: 20px; height: 4px; border-radius: 2px; flex: none; }
+.feature-legend-ikon { display: inline-flex; flex: none; }

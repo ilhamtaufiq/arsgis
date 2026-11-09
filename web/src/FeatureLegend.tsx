@@ -1,3 +1,4 @@
+import './feature-legend.css'
 import { FEATURE_META, ikonHtml } from './featureIcons'
 import type { FeatureType } from './types'
 
