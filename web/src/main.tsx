@@ -13,6 +13,7 @@ const DashboardPage = lazy(() => import('./Dashboard').then((m) => ({ default: m
 const AdminPage = lazy(() => import('./Admin').then((m) => ({ default: m.AdminPage })))
 const ImporPage = lazy(() => import('./ImporPage').then((m) => ({ default: m.ImporPage })))
 const DesaDetailPage = lazy(() => import('./DesaDetailPage').then((m) => ({ default: m.DesaDetailPage })))
+const OmPage = lazy(() => import('./om/OmPage').then((m) => ({ default: m.OmPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
@@ -40,6 +41,10 @@ createRoot(document.getElementById('root')!).render(
         ) : path === '/impor' ? (
           <LoginGate judul="Impor KML">
             <ImporPage />
+          </LoginGate>
+        ) : path === '/om' ? (
+          <LoginGate judul="Operasi dan pemeliharaan">
+            <OmPage />
           </LoginGate>
         ) : path === '/admin' ? (
           <LoginGate judul="Admin">
