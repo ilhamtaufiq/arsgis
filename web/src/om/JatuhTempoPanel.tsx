@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toastGalat, toastSukses } from '../components/shared/toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { catatJadwalSelesai, jatuhTempo, OmApiError } from './omApi'
+import { catatJadwalSelesai, jatuhTempo } from './omApi'
 import { formatTanggal, LABEL_JENIS_PERAWATAN, teksJatuhTempo } from './omLogic'
 import './om.css'
 
@@ -25,7 +26,11 @@ export function JatuhTempoPanel({ networkId, bisaCatat, ringkas = false }: Props
   })
   const catat = useMutation({
     mutationFn: (jadwalId: number) => catatJadwalSelesai(jadwalId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['om'] }),
+    onSuccess: () => {
+      toastSukses('jadwal.selesai')
+      return qc.invalidateQueries({ queryKey: ['om'] })
+    },
+    onError: (err) => toastGalat(err),
   })
 
   const baris = daftar.data ?? []
@@ -47,7 +52,6 @@ export function JatuhTempoPanel({ networkId, bisaCatat, ringkas = false }: Props
       )}
       {daftar.isPending && <p className="om-muted">Memuat jadwal…</p>}
       {daftar.isError && <p role="alert" className="om-error">{(daftar.error as Error).message}</p>}
-      {catat.isError && <p role="alert" className="om-error">{(catat.error as OmApiError).message}</p>}
       {daftar.data && tampil.length === 0 && <p className="om-muted">Tidak ada perawatan yang jatuh tempo.</p>}
       {tampil.length > 0 && (
         <table className="om-tabel">

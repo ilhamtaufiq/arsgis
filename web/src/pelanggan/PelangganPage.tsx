@@ -2,6 +2,7 @@ import '../preflight.css'
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { canReadPelanggan, canSeeCustomerData, fetchMe, ROLE_LABEL, type User } from '../api'
+import { toastGalat, toastSukses } from '../components/shared/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -243,9 +244,10 @@ function FormPelanggan({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pelanggan'] })
       qc.invalidateQueries({ queryKey: ['cakupan'] })
+      toastSukses('pelanggan.simpan')
       onSelesai()
     },
-    onError: (err) => setGalat((err as Error).message),
+    onError: (err) => toastGalat(err),
   })
 
   function kirim(e: FormEvent) {
@@ -447,12 +449,13 @@ function DusunEditor({ desaId, daftar }: { desaId: number; daftar: Dusun[] }) {
       setGalat(null)
       qc.invalidateQueries({ queryKey: ['dusun', desaId] })
       qc.invalidateQueries({ queryKey: ['cakupan', desaId] })
+      toastSukses('dusun.simpan')
       setPilih('baru')
       setNama('')
       setRumah('0')
       setJiwa('0')
     },
-    onError: (err) => setGalat((err as Error).message),
+    onError: (err) => toastGalat(err),
   })
 
   function pilihDusun(v: string) {
@@ -523,27 +526,21 @@ function DusunEditor({ desaId, daftar }: { desaId: number; daftar: Dusun[] }) {
 function PasangSr({ desaId, daftarDusun }: { desaId: number; daftarDusun: Dusun[] }) {
   const qc = useQueryClient()
   const [cari, setCari] = useState('')
-  const [galat, setGalat] = useState<string | null>(null)
   const sr = useQuery({ queryKey: ['sr-pilihan', desaId, cari], queryFn: () => daftarSr({ desaId, q: cari.trim() }) })
   const pasang = useMutation({
     mutationFn: (args: { featureId: number; dusunId: number | null }) => pasangSrKeDusun(args.featureId, args.dusunId),
     onSuccess: () => {
-      setGalat(null)
+      toastSukses('sr.pasang')
       qc.invalidateQueries({ queryKey: ['cakupan', desaId] })
       qc.invalidateQueries({ queryKey: ['sr-pilihan', desaId] })
     },
-    onError: (err) => setGalat((err as Error).message),
+    onError: (err) => toastGalat(err),
   })
 
   return (
     <section className="flex flex-col gap-2">
       <h2 className="font-semibold">Pasang titik SR ke dusun</h2>
       <Input placeholder="Cari kode atau nama SR" value={cari} onChange={(e) => setCari(e.target.value)} className="w-64" />
-      {galat && (
-        <p role="alert" className="text-sm text-red-700">
-          {galat}
-        </p>
-      )}
       <Table>
         <TableHeader>
           <TableRow>

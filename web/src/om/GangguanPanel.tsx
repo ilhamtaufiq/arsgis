@@ -1,11 +1,11 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { LokasiPicker } from './LokasiPicker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toastGalat, toastSukses } from '../components/shared/toast'
 import {
   ambilGangguan,
   buatGangguan,
   daftarGangguan,
-  OmApiError,
   type Gangguan,
   type JenisGangguan,
   type StatusGangguan,
@@ -117,9 +117,11 @@ function FormLaporan({ networkId, onSimpan }: { networkId: number; onSimpan: (g:
   const simpan = useMutation({
     mutationFn: buatGangguan,
     onSuccess: (g) => {
+      toastSukses('gangguan.buat')
       qc.invalidateQueries({ queryKey: ['om', 'gangguan'] })
       onSimpan(g)
     },
+    onError: (err) => toastGalat(err),
   })
 
   function kirim(e: FormEvent) {
@@ -198,7 +200,6 @@ function FormLaporan({ networkId, onSimpan }: { networkId: number; onSimpan: (g:
           ))}
         </ul>
       )}
-      {simpan.isError && <p role="alert" className="om-error">{(simpan.error as OmApiError).message}</p>}
       <button type="submit" disabled={simpan.isPending}>
         {simpan.isPending ? 'Menyimpan…' : 'Simpan laporan'}
       </button>
@@ -217,14 +218,19 @@ function DetailLaporan({ id, bisaCatat, networkId }: { id: number; bisaCatat: bo
   }
   const ubah = useMutation({
     mutationFn: (status: StatusGangguan) => ubahStatusGangguan(id, status),
-    onSuccess: segarkan,
+    onSuccess: () => {
+      toastSukses('gangguan.status')
+      segarkan()
+    },
+    onError: (err) => toastGalat(err),
   })
   const foto = useMutation({
     mutationFn: (berkas: File) => unggahFoto(id, berkas),
     onSuccess: () => {
-      setPesanFoto('Foto ditambahkan.')
+      toastSukses('gangguan.foto')
       segarkan()
     },
+    onError: (err) => toastGalat(err),
   })
 
   if (detail.isPending) return <p className="om-muted">Memuat detail…</p>
@@ -283,7 +289,6 @@ function DetailLaporan({ id, bisaCatat, networkId }: { id: number; bisaCatat: bo
           ))}
         </div>
       )}
-      {ubah.isError && <p role="alert" className="om-error">{(ubah.error as OmApiError).message}</p>}
 
       <h4>Foto</h4>
       {g.foto.length === 0 && <p className="om-muted">Belum ada foto.</p>}
@@ -299,7 +304,6 @@ function DetailLaporan({ id, bisaCatat, networkId }: { id: number; bisaCatat: bo
         </label>
       )}
       {pesanFoto && <p role="status" className="om-muted">{pesanFoto}</p>}
-      {foto.isError && <p role="alert" className="om-error">{(foto.error as OmApiError).message}</p>}
     </article>
   )
 }

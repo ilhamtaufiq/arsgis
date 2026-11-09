@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchMe } from '../api'
+import { toastGalat, toastSukses } from '../components/shared/toast'
+
 import {
   catatJadwalSelesai,
   omAset,
-  OmApiError,
   simpanRehab,
   tambahJadwal,
   tambahPerbaikan,
@@ -111,8 +112,10 @@ function RehabBagian({
       }),
     onSuccess: () => {
       setBuka(false)
+      toastSukses('rehab.simpan')
       segarkan()
     },
+    onError: (err) => toastGalat(err),
   })
 
   function kirim(e: FormEvent) {
@@ -165,7 +168,6 @@ function RehabBagian({
             <textarea rows={2} value={catatan} onChange={(e) => setCatatan(e.target.value)} />
           </label>
           {galat && <p role="alert" className="om-error">{galat}</p>}
-          {simpan.isError && <p role="alert" className="om-error">{(simpan.error as OmApiError).message}</p>}
           <div className="om-baris">
             <button type="submit" disabled={simpan.isPending}>
               Simpan
@@ -205,7 +207,9 @@ function PerbaikanBagian({
         teknisi: teknisi.trim(),
         biaya: biaya === '' ? null : Number(biaya),
       }),
+    onError: (err) => toastGalat(err),
     onSuccess: () => {
+      toastSukses('perbaikan.catat')
       setBuka(false)
       setTindakan('')
       setTeknisi('')
@@ -259,7 +263,6 @@ function PerbaikanBagian({
             <input type="number" min={0} step="any" value={biaya} onChange={(e) => setBiaya(e.target.value)} />
           </label>
           {galat && <p role="alert" className="om-error">{galat}</p>}
-          {simpan.isError && <p role="alert" className="om-error">{(simpan.error as OmApiError).message}</p>}
           <div className="om-baris">
             <button type="submit" disabled={simpan.isPending}>
               Simpan
@@ -298,13 +301,19 @@ function JadwalBagian({
         tanggal_berikutnya: pertama || null,
       }),
     onSuccess: () => {
+      toastSukses('jadwal.tambah')
       setBuka(false)
       segarkan()
     },
+    onError: (err) => toastGalat(err),
   })
   const selesai = useMutation({
     mutationFn: (id: number) => catatJadwalSelesai(id),
-    onSuccess: segarkan,
+    onSuccess: () => {
+      toastSukses('jadwal.selesai')
+      segarkan()
+    },
+    onError: (err) => toastGalat(err),
   })
 
   function kirim(e: FormEvent) {
@@ -332,7 +341,6 @@ function JadwalBagian({
           </li>
         ))}
       </ul>
-      {selesai.isError && <p role="alert" className="om-error">{(selesai.error as OmApiError).message}</p>}
       {bisaCatat && !buka && (
         <button type="button" onClick={() => setBuka(true)}>
           Tambah jadwal
@@ -359,8 +367,7 @@ function JadwalBagian({
             <input type="date" value={pertama} onChange={(e) => setPertama(e.target.value)} />
           </label>
           {galat && <p role="alert" className="om-error">{galat}</p>}
-          {tambah.isError && <p role="alert" className="om-error">{(tambah.error as OmApiError).message}</p>}
-          <div className="om-baris">
+              <div className="om-baris">
             <button type="submit" disabled={tambah.isPending}>
               Simpan
             </button>

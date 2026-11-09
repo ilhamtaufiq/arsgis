@@ -2,6 +2,7 @@ import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { History, Pencil, X } from 'lucide-react'
 import { fetchNetworks } from './api'
+import { toastGalat, toastSukses } from './components/shared/toast'
 import {
   adalahFitur,
   AsetApiError,
@@ -88,10 +89,11 @@ function FormulirIsi({
     },
     onSuccess: (data) => {
       segarkan(qc)
+      toastSukses(formulir.kind === 'buat' ? 'aset.tambah' : 'aset.ubah')
       setFormulir(null)
       if (adalahFitur(data)) select(data)
     },
-    onError: (err) => setGalat(err.message),
+    onError: (err) => toastGalat(err),
   })
 
   function kirim(e: FormEvent) {
@@ -243,10 +245,11 @@ export function AsetModeBar() {
     },
     onSuccess: (data) => {
       segarkan(qc)
+      toastSukses('aset.pindah')
       setEditor(null)
       if (adalahFitur(data)) select(data)
     },
-    onError: (err) => setGalat(err.message),
+    onError: (err) => toastGalat(err),
   })
 
   if (!editor) return null
@@ -331,11 +334,12 @@ export function AsetAksi({ feature }: { feature: PipeFeature }) {
     mutationFn: () => hapusAset(feature.id),
     onSuccess: () => {
       segarkan(qc)
+      toastSukses('aset.hapus')
       select(null)
     },
     onError: (err) => {
       setKonfirmasi(false)
-      setGalat(err.message)
+      toastGalat(err)
     },
   })
 
