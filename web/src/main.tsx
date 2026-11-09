@@ -40,7 +40,8 @@ function Rute() {
 
   if (path === '/') return <LandingPage />
   if (path === '/masuk') return <LoginPage />
-  if (path === '/peta') return berGerbang('Peta jaringan', <MapPage />, { title: 'Peta jaringan', penuhLayar: true })
+  // Peta berlayar penuh tanpa sidebar. Navigasi ke halaman lain lewat tombol Dashboard di peta.
+  if (path === '/peta') return berGerbang('Peta jaringan', <MapPage />)
   if (path === '/dashboard') return berGerbang('Dashboard', <DashboardPage />)
   if (path === '/pelanggan') return berGerbang('Pelanggan dan cakupan', <PelangganPage />, { title: 'Pelanggan' })
   if (path === '/impor') return berGerbang('Impor data', <ImporPage />, { title: 'Impor data' })

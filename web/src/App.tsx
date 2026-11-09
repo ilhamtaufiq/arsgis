@@ -9,6 +9,7 @@ import { FeatureLegend } from './FeatureLegend'
 import { MapView } from './MapView'
 import { LayerChips } from './LayerChips'
 import { ToolButtons, ToolPanel } from './MapTools'
+import { AuthPanel } from './Auth'
 import { SearchBox } from './Search'
 import { DEFAULT_LAYERS, DEFAULT_PIPE_FUNCTIONS, useMapStore } from './store'
 import type { Bbox, FeatureType } from './types'
@@ -106,6 +107,10 @@ export function App() {
           <LayerChips />
         </div>
 
+        <div className="float-right">
+          <AuthPanel user={user} />
+        </div>
+
         <div className="toolbar">
           <button type="button" className="round" aria-label="Cakupan SPM" aria-pressed={cakupanOpen} onClick={toggleCakupan}>
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -113,6 +118,11 @@ export function App() {
             </svg>
           </button>
           <ToolButtons />
+          <a className="round" href="/dashboard" aria-label="Dashboard" title="Dashboard">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </a>
         </div>
 
         <div className="notices">
