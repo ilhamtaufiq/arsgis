@@ -1,17 +1,8 @@
 import type { DesaProps } from './cakupanApi'
-import { ASET_LABEL } from './asetStyle'
+import { FEATURE_META, ikonHtml } from './featureIcons'
 import { AsetAksi } from './AsetEditor'
 import type { PipeFeature } from './types'
 import { OmAsetPanel } from './om/OmAsetPanel'
-
-const LABEL: Record<string, string> = {
-  pipa: 'Pipa',
-  valve: 'Valve',
-  reservoir: 'Reservoir',
-  sr: 'Sambungan rumah',
-  bronkaptering: 'Bronkaptering',
-  ...ASET_LABEL,
-}
 
 type Props = { feature: PipeFeature | null; onClose: () => void; bolehEdit?: boolean }
 
@@ -31,7 +22,8 @@ export function InfoPanel({ feature, onClose, bolehEdit = false }: Props) {
   return (
     <aside className="info">
       <div className="info-head">
-        <strong>{LABEL[p.feature_type] ?? p.feature_type}</strong>
+        <span className="info-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ikonHtml(p.feature_type, p.terlayani, 26) }} />
+        <strong>{FEATURE_META[p.feature_type]?.label ?? p.feature_type}</strong>
         <button type="button" onClick={onClose} aria-label="Tutup">×</button>
       </div>
       <dl>

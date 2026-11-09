@@ -1,25 +1,7 @@
 import { useState, type KeyboardEvent } from 'react'
 import { useMapStore } from './store'
-import { ASET_COLOR, ASET_LABEL } from './asetStyle'
+import { FEATURE_META, ikonHtml } from './featureIcons'
 import type { PipeFeature } from './types'
-
-const LABEL: Record<string, string> = {
-  pipa: 'Pipa',
-  valve: 'Valve',
-  reservoir: 'Reservoir',
-  sr: 'Sambungan rumah',
-  bronkaptering: 'Bronkaptering',
-  ...ASET_LABEL,
-}
-
-const COLOR: Record<string, string> = {
-  pipa: '#1d4ed8',
-  valve: '#111111',
-  reservoir: '#0f766e',
-  sr: '#a16207',
-  bronkaptering: '#0891b2',
-  ...ASET_COLOR,
-}
 
 type Props = {
   features: PipeFeature[]
@@ -103,9 +85,13 @@ export function SearchBox({ features }: Props) {
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => pick(f)}
               >
-                <span className="island-dot" style={{ background: COLOR[f.properties.feature_type] }} />
+                <span
+                  className="island-icon"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: ikonHtml(f.properties.feature_type, f.properties.terlayani, 22) }}
+                />
                 <span className="island-name">{f.properties.nama}</span>
-                <small>{LABEL[f.properties.feature_type] ?? f.properties.feature_type}</small>
+                <small>{FEATURE_META[f.properties.feature_type]?.label ?? f.properties.feature_type}</small>
               </button>
             </li>
           ))}
