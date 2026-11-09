@@ -4,7 +4,8 @@ import type { FeatureCollection } from 'geojson'
 import 'leaflet/dist/leaflet.css'
 import { leafletLayer } from 'protomaps-leaflet'
 import { cakupanColor, type DesaGeo, type DesaProps } from './cakupanApi'
-import { ASET_COLOR } from './asetStyle'
+import { FEATURE_META } from './featureIcons'
+import { markerIcon } from './featureMarker'
 import { attachAsetEditing } from './asetEditing'
 import { attachDrawing } from './drawing'
 import { useMapStore } from './store'
@@ -36,33 +37,12 @@ function pipeWeight(diameterMm: number | null) {
   return Math.min(6, Math.max(1.5, 1.5 + ((d - 15) * 4.5) / 135))
 }
 
-function pointStyle(type: string, terlayani?: boolean | null): L.CircleMarkerOptions {
-  switch (type) {
-    case 'valve':
-      return { radius: 6, color: '#111111', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }
-    case 'reservoir':
-      return { radius: 10, color: '#ffffff', weight: 2, fillColor: '#0f766e', fillOpacity: 1 }
-    case 'bronkaptering':
-      return { radius: 9, color: '#ffffff', weight: 2, fillColor: '#0891b2', fillOpacity: 1 }
-    // Aset baru. Leaflet hanya punya circleMarker, jadi jenis dibedakan lewat warna dan ukuran.
-    case 'bak_penahan_tekanan':
-      return { radius: 8, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.bak_penahan_tekanan, fillOpacity: 1 }
-    case 'menara_air':
-      return { radius: 9, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.menara_air, fillOpacity: 1 }
-    case 'hidran_umum':
-      return { radius: 5, color: '#ffffff', weight: 1.5, fillColor: ASET_COLOR.hidran_umum, fillOpacity: 1 }
-    case 'intake':
-      return { radius: 10, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.intake, fillOpacity: 1 }
-    case 'pompa':
-      return { radius: 7, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.pompa, fillOpacity: 1 }
-    case 'meter_induk':
-      return { radius: 6, color: '#ffffff', weight: 2, fillColor: ASET_COLOR.meter_induk, fillOpacity: 1 }
-    default:
-      // Sambungan rumah (sr). Warna menunjukkan cakupan: hijau sudah terlayani, kuning belum.
-      if (terlayani === true) return { radius: 4, stroke: false, fillColor: '#16a34a', fillOpacity: 1 }
-      if (terlayani === false) return { radius: 4.5, color: '#713f12', weight: 0.8, fillColor: '#facc15', fillOpacity: 1 }
-      return { radius: 4, stroke: false, fillColor: '#a16207', fillOpacity: 1 }
-  }
+/** Teks tooltip fitur: nama (atau jenis bila tanpa nama) dan jenisnya. Nama dari input pengguna, di-escape. */
+function tooltipFitur(p: PipeFeature['properties']): string {
+  const esc = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+  const jenis = FEATURE_META[p.feature_type].label
+  const nama = p.nama ? esc(p.nama) : esc(jenis)
+  return p.nama ? `<strong>${nama}</strong><br/><small>${esc(jenis)}</small>` : `<strong>${nama}</strong>`
 }
 
 function desaStyle(feature?: GeoJSON.Feature): L.PathOptions {
@@ -80,6 +60,8 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.GeoJSON | null>(null)
+  // Lapisan klik tak terlihat di atas pipa: area sentuh pipa jauh lebih lebar dari garisnya.
+  const hitRef = useRef<L.GeoJSON | null>(null)
   const desaLayerRef = useRef<L.GeoJSON | null>(null)
   const focus = useMapStore((s) => s.focus)
   const onBboxChangeRef = useRef(onBboxChange)
@@ -109,6 +91,14 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
       },
     })
 
+    // Klik pada fitur tidak boleh ikut dianggap klik kosong di peta, dan tidak boleh menutup pilihan lain.
+    const pilihFitur = (feature: PipeFeature, e: L.LeafletMouseEvent) => {
+      // Saat menambah pipa, klik pada pipa yang ada dipakai sebagai titik jalur baru, jadi diteruskan ke peta.
+      if (useMapStore.getState().editor?.kind === 'tambah') return
+      L.DomEvent.stopPropagation(e)
+      useMapStore.getState().select(feature)
+    }
+
     const layer = L.geoJSON(undefined, {
       style: (feature) => {
         const p = (feature as PipeFeature).properties
@@ -121,16 +111,23 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
       },
       pointToLayer: (feature, latlng) => {
         const p = (feature as PipeFeature).properties
-        return L.circleMarker(latlng, pointStyle(p.feature_type, p.terlayani))
+        return L.marker(latlng, { icon: markerIcon(p.feature_type, p.terlayani), keyboard: true })
       },
       onEachFeature: (feature, l) => {
-        l.on('click', (e) => {
-          // Saat menambah pipa, klik pada pipa yang ada dipakai sebagai titik jalur baru, jadi diteruskan ke peta.
-          if (useMapStore.getState().editor?.kind === 'tambah') return
-          // Klik pada fitur tidak boleh ikut dianggap klik kosong di peta.
-          L.DomEvent.stopPropagation(e)
-          useMapStore.getState().select(feature as PipeFeature)
-        })
+        const p = (feature as PipeFeature).properties
+        l.bindTooltip(tooltipFitur(p), { sticky: true, direction: 'top', opacity: 0.95 })
+        l.on('click', (e) => pilihFitur(feature as PipeFeature, e))
+      },
+    }).addTo(map)
+
+    // Pipa tipis sulit dikenai. Lapisan ini memberi area sentuh selebar 14 px, hanya untuk garis.
+    const hit = L.geoJSON(undefined, {
+      filter: (feature) => feature.geometry.type === 'LineString',
+      style: { weight: 14, opacity: 0, lineCap: 'round', lineJoin: 'round' },
+      onEachFeature: (feature, l) => {
+        const p = (feature as PipeFeature).properties
+        l.bindTooltip(tooltipFitur(p), { sticky: true, direction: 'top', opacity: 0.95 })
+        l.on('click', (e) => pilihFitur(feature as PipeFeature, e))
       },
     }).addTo(map)
 
@@ -146,6 +143,7 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
 
     mapRef.current = map
     layerRef.current = layer
+    hitRef.current = hit
     desaLayerRef.current = desaLayer
     return () => {
       detachEditing()
@@ -153,6 +151,7 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
       map.remove()
       mapRef.current = null
       layerRef.current = null
+      hitRef.current = null
       desaLayerRef.current = null
     }
   }, [])
@@ -165,6 +164,7 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
       if (!map.hasLayer(desaLayer)) desaLayer.addTo(map)
       // Pastikan pipa tetap di atas poligon setelah lapisan desa ditambahkan ulang.
       layerRef.current?.bringToFront()
+      hitRef.current?.bringToFront()
     } else {
       desaLayer.remove()
     }
@@ -176,6 +176,7 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
     desaLayer.clearLayers()
     if (desa) desaLayer.addData(desa as FeatureCollection)
     layerRef.current?.bringToFront()
+    hitRef.current?.bringToFront()
   }, [desa])
 
   // Unit dipilih: pusatkan ke batas desanya. Dilakukan sekali per pilihan, bukan saat poligon dimuat ulang.
@@ -198,10 +199,14 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
 
   useEffect(() => {
     const layer = layerRef.current
-    if (!layer) return
+    const hit = hitRef.current
+    if (!layer || !hit) return
     layer.clearLayers()
+    hit.clearLayers()
     const collection: FeatureCollection = { type: 'FeatureCollection', features }
     layer.addData(collection)
+    hit.addData(collection)
+    hit.bringToFront()
   }, [features])
 
   return <div ref={container} className="map" />

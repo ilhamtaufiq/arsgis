@@ -6,6 +6,7 @@ import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api
 import { DesaInfo, InfoPanel } from './InfoPanel'
 import { fetchDesaGeo } from './cakupanApi'
 import { Legend } from './Legend'
+import { FeatureLegend } from './FeatureLegend'
 import { MapView } from './MapView'
 import { LayerChips } from './LayerChips'
 import { ToolButtons, ToolPanel } from './MapTools'
@@ -133,6 +134,7 @@ export function App() {
         <ToolPanel />
         {customerAllowed && <AsetFormPanel />}
         {customerAllowed && <AsetModeBar />}
+        <FeatureLegend />
         {cakupanOpen && <Legend />}
         {bboxTerlaluLebar && (
           <div
