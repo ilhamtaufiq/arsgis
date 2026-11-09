@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import { leafletLayer } from 'protomaps-leaflet'
 import { cakupanColor, type DesaGeo, type DesaProps } from './cakupanApi'
 import { ASET_COLOR } from './asetStyle'
+import { attachAsetEditing } from './asetEditing'
 import { attachDrawing } from './drawing'
 import { useMapStore } from './store'
 import type { Bbox, PipeFeature } from './types'
@@ -119,6 +120,8 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
       pointToLayer: (feature, latlng) => L.circleMarker(latlng, pointStyle((feature as PipeFeature).properties.feature_type)),
       onEachFeature: (feature, l) => {
         l.on('click', (e) => {
+          // Saat menambah pipa, klik pada pipa yang ada dipakai sebagai titik jalur baru, jadi diteruskan ke peta.
+          if (useMapStore.getState().editor?.kind === 'tambah') return
           // Klik pada fitur tidak boleh ikut dianggap klik kosong di peta.
           L.DomEvent.stopPropagation(e)
           useMapStore.getState().select(feature as PipeFeature)
@@ -134,11 +137,13 @@ export function MapView({ features, desa, showCakupan, focusDesaId, onBboxChange
     onBboxChangeRef.current(toBbox(map))
 
     const detachDrawing = attachDrawing(map)
+    const detachEditing = attachAsetEditing(map)
 
     mapRef.current = map
     layerRef.current = layer
     desaLayerRef.current = desaLayer
     return () => {
+      detachEditing()
       detachDrawing()
       map.remove()
       mapRef.current = null

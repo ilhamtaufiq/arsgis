@@ -1,5 +1,6 @@
 import type { DesaProps } from './cakupanApi'
 import { ASET_LABEL } from './asetStyle'
+import { AsetAksi } from './AsetEditor'
 import type { PipeFeature } from './types'
 
 const LABEL: Record<string, string> = {
@@ -11,9 +12,9 @@ const LABEL: Record<string, string> = {
   ...ASET_LABEL,
 }
 
-type Props = { feature: PipeFeature | null; onClose: () => void }
+type Props = { feature: PipeFeature | null; onClose: () => void; bolehEdit?: boolean }
 
-export function InfoPanel({ feature, onClose }: Props) {
+export function InfoPanel({ feature, onClose, bolehEdit = false }: Props) {
   if (!feature) {
     return <aside className="info empty">Klik pipa atau titik di peta untuk melihat detailnya.</aside>
   }
@@ -40,6 +41,7 @@ export function InfoPanel({ feature, onClose }: Props) {
           </div>
         ))}
       </dl>
+      {bolehEdit && <AsetAksi key={feature.id} feature={feature} />}
     </aside>
   )
 }

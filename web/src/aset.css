@@ -1,0 +1,65 @@
+/* Edit aset: form, bilah mode, aksi di panel info, riwayat, dan halaman impor. */
+.aset-form-panel { z-index: 1150; }
+.aset-form { display: grid; gap: 10px; align-content: start; }
+.aset-field { display: grid; gap: 4px; }
+.aset-field label { font-weight: 600; }
+.aset-field input, .aset-field select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--map-border-input);
+  border-radius: var(--map-radius-md);
+  background: var(--map-bg);
+  color: var(--map-text);
+  font: inherit;
+}
+.aset-field [aria-invalid="true"] { border-color: var(--map-danger-strong); }
+.aset-galat { color: var(--map-danger-strong, #b91c1c); font-size: 13px; }
+
+.aset-seret { background: transparent; border: 0; }
+
+.aset-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 10px 14px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+}
+.aset-bar-aksi { display: flex; gap: 8px; }
+
+.info { max-height: calc(100% - 32px); overflow-y: auto; }
+.aset-aksi { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5e7eb; display: grid; gap: 10px; }
+.aset-aksi-btn { display: flex; gap: 8px; flex-wrap: wrap; }
+.aset-konfirmasi { flex-basis: 100%; display: grid; gap: 8px; padding: 8px; border: 1px solid #fecaca; background: #fef2f2; border-radius: 8px; }
+.aset-konfirmasi p { margin: 0; }
+.aset-riwayat summary { cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.aset-riwayat-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 13px; }
+.aset-riwayat-list ul { margin: 2px 0 0; padding-left: 16px; }
+
+/* Panel edit di peta */
+.aset-jenis { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+/* Halaman impor */
+.impor { min-height: 100vh; background: #ebebeb; padding: 16px; display: grid; place-items: start center; }
+.impor-card { width: min(640px, 100%); background: #fff; border-radius: 16px; padding: 20px; display: grid; gap: 14px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); font-size: 14px; }
+.impor-card h1 { margin: 0; font-size: 20px; }
+.impor-card p { margin: 0; }
+.impor-field { display: grid; gap: 4px; }
+.impor-field label { font-weight: 600; }
+.impor-field select, .impor-field input[type="file"] { min-height: 40px; font: inherit; }
+.impor-report { display: grid; gap: 8px; padding: 12px; background: #f6f7f9; border-radius: 10px; }
+.impor-report ul { margin: 0; padding-left: 18px; }
+.impor-aksi { display: flex; gap: 8px; flex-wrap: wrap; }
+.impor-card .panel-error { color: #b91c1c; }
+.impor-btn { min-height: 40px; padding: 0 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; font: inherit; cursor: pointer; }
+.impor-btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.impor-btn:disabled { opacity: 0.45; cursor: not-allowed; }

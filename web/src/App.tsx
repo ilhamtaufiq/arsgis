@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AuthPanel } from './Auth'
+import { AsetFormPanel, AsetModeBar } from './AsetEditor'
 import { canSeeCustomerData, fetchFeatures, fetchMe, fetchNetworks } from './api'
 import { DesaInfo, InfoPanel } from './InfoPanel'
 import { fetchDesaGeo } from './cakupanApi'
@@ -27,6 +28,7 @@ export function App() {
   const setNetwork = useMapStore((s) => s.setNetwork)
   const setBbox = useMapStore((s) => s.setBbox)
   const select = useMapStore((s) => s.select)
+  const editor = useMapStore((s) => s.editor)
 
   const networks = useQuery({ queryKey: ['networks'], queryFn: fetchNetworks })
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
@@ -60,10 +62,12 @@ export function App() {
     () =>
       (features.data ?? []).filter(
         (f) =>
+          // Aset yang sedang dipindah digantikan objek yang bisa diseret.
+          !(editor?.kind === 'pindah' && editor.feature.id === f.id) &&
           (networkId === null || f.properties.network_id === networkId) &&
           (f.properties.feature_type !== 'pipa' || pipeFunctions.includes(f.properties.fungsi ?? 'distribusi')),
       ),
-    [features.data, pipeFunctions, networkId],
+    [features.data, pipeFunctions, networkId, editor],
   )
 
   const handleBbox = (b: Bbox) => setBbox(b)
@@ -127,6 +131,8 @@ export function App() {
         </div>
 
         <ToolPanel />
+        {customerAllowed && <AsetFormPanel />}
+        {customerAllowed && <AsetModeBar />}
         {cakupanOpen && <Legend />}
         {bboxTerlaluLebar && (
           <div
@@ -150,7 +156,7 @@ export function App() {
         {desaSelected ? (
           <DesaInfo desa={desaSelected} onClose={() => selectDesa(null)} />
         ) : (
-          <InfoPanel feature={selected} onClose={() => select(null)} />
+          <InfoPanel feature={selected} onClose={() => select(null)} bolehEdit={customerAllowed} />
         )}
       </main>
     </div>

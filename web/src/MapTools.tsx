@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, Download, Layers, Minus, Pencil, Search, SquareDashed, X } from 'lucide-react'
+import { canSeeCustomerData, fetchMe } from './api'
+import { geometriUntuk, JENIS_SEMUA, LABEL_JENIS } from './asetForm'
+import { ChevronDown, Download, FilePlus2, Layers, Minus, Pencil, Search, SquareDashed, X } from 'lucide-react'
 import { fetchCatalog, filterLayers, kindBadge, type CatalogLayer, type LayerFilter } from './catalogApi'
 import { clearDrawn, downloadDrawn } from './drawing'
 import { useMapStore } from './store'
@@ -8,11 +10,13 @@ import { useLayerToggle } from './useLayerToggle'
 import './map-tokens.css'
 import './map-ui.css'
 import './tools.css'
+import './aset.css'
 
 /** Dua tombol bulat untuk deretan alat di bawah peta: daftar layer dan alat gambar. */
 export function ToolButtons() {
   const panel = useMapStore((s) => s.panel)
   const setPanel = useMapStore((s) => s.setPanel)
+  const bolehEdit = useBolehEdit()
   return (
     <>
       <button type="button" className="round" aria-label="Layer peta" title="Layer peta" aria-pressed={panel === 'layer'} onClick={() => setPanel('layer')}>
@@ -21,8 +25,19 @@ export function ToolButtons() {
       <button type="button" className="round" aria-label="Alat gambar" title="Alat gambar" aria-pressed={panel === 'alat'} onClick={() => setPanel('alat')}>
         <Pencil size={18} aria-hidden="true" />
       </button>
+      {bolehEdit && (
+        <button type="button" className="round" aria-label="Edit aset" title="Edit aset" aria-pressed={panel === 'edit'} onClick={() => setPanel('edit')}>
+          <FilePlus2 size={18} aria-hidden="true" />
+        </button>
+      )}
     </>
   )
+}
+
+/** Mode edit hanya untuk editor dan admin. Viewer tidak melihat tombol tambah, ubah, pindah, atau hapus. */
+export function useBolehEdit(): boolean {
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  return canSeeCustomerData(me.data ?? null)
 }
 
 /** Panel di tepi kiri: header (ikon, judul, minimalkan, tutup) lalu isi daftar layer atau alat gambar. */
@@ -39,9 +54,10 @@ export function ToolPanel() {
     if (panel) titleRef.current?.focus()
   }, [panel])
 
-  if (!panel) return null
-  const Icon = panel === 'layer' ? Layers : Pencil
-  const title = panel === 'layer' ? 'Layer' : 'Gambar'
+  const bolehEdit = useBolehEdit()
+  if (!panel || (panel === 'edit' && !bolehEdit)) return null
+  const Icon = panel === 'layer' ? Layers : panel === 'edit' ? FilePlus2 : Pencil
+  const title = panel === 'layer' ? 'Layer' : panel === 'edit' ? 'Edit aset' : 'Gambar'
 
   return (
     <aside
@@ -62,7 +78,7 @@ export function ToolPanel() {
           <X size={16} aria-hidden="true" />
         </button>
       </header>
-      {!minimized && <div className="panel-body">{panel === 'layer' ? <LayerPanel /> : <DrawPanel />}</div>}
+      {!minimized && <div className="panel-body">{panel === 'layer' ? <LayerPanel /> : panel === 'edit' ? <EditPanel /> : <DrawPanel />}</div>}
     </aside>
   )
 }
@@ -239,6 +255,47 @@ function DrawPanel() {
         </div>
         {message && <p className="panel-muted" role="status">{message}</p>}
       </AccordionSection>
+    </div>
+  )
+}
+
+/** Pilih jenis aset yang akan ditambahkan, lalu gambar di peta. Isian dibuka setelah lokasi ditentukan. */
+function EditPanel() {
+  const editor = useMapStore((s) => s.editor)
+  const networkId = useMapStore((s) => s.networkId)
+  const setEditor = useMapStore((s) => s.setEditor)
+  const setFormulir = useMapStore((s) => s.setFormulir)
+  const aktif = editor?.kind === 'tambah' ? editor.jenis : null
+  return (
+    <div className="stack">
+      <p className="panel-muted">
+        {networkId === null
+          ? 'Pilih unit SPAM tujuan di header sebelum menambah aset.'
+          : 'Pilih jenis aset, lalu klik lokasinya di peta. Untuk mengubah, memindah, atau menghapus, klik aset di peta.'}
+      </p>
+      <div className="aset-jenis">
+        {JENIS_SEMUA.map((j) => (
+          <button
+            key={j}
+            type="button"
+            className="tool-btn"
+            disabled={networkId === null}
+            aria-pressed={aktif === j}
+            onClick={() => {
+              setFormulir(null)
+              setEditor(aktif === j ? null : { kind: 'tambah', jenis: j, titik: [] })
+            }}
+          >
+            {LABEL_JENIS[j]}
+          </button>
+        ))}
+      </div>
+      {aktif && (
+        <p className="panel-muted" role="status">
+          {geometriUntuk(aktif) === 'Point' ? 'Klik satu titik di peta.' : 'Klik titik-titik jalur di peta, lalu pilih Selesai.'}
+        </p>
+      )}
+      <a href="/impor" className="tool-btn">Impor KML</a>
     </div>
   )
 }
