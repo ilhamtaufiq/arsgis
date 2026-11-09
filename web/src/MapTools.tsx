@@ -6,6 +6,7 @@ import { ChevronDown, Download, FilePlus2, Layers, Minus, Pencil, Search, Square
 import { fetchCatalog, filterLayers, kindBadge, type CatalogLayer, type LayerFilter } from './catalogApi'
 import { clearDrawn, downloadDrawn } from './drawing'
 import { useMapStore } from './store'
+import { Tautan } from './shell/navigasi'
 import { useLayerToggle } from './useLayerToggle'
 import './map-tokens.css'
 import './map-ui.css'
@@ -295,7 +296,7 @@ function EditPanel() {
           {geometriUntuk(aktif) === 'Point' ? 'Klik satu titik di peta.' : 'Klik titik-titik jalur di peta, lalu pilih Selesai.'}
         </p>
       )}
-      <a href="/impor" className="tool-btn">Impor KML</a>
+      <Tautan href="/impor" className="tool-btn">Impor data</Tautan>
     </div>
   )
 }

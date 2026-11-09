@@ -39,7 +39,7 @@ export function ImporPage() {
     return (
       <div className="impor">
         <div className="impor-card">
-          <h1>Impor KML</h1>
+          <h1>Impor data</h1>
           <p role="alert" className="panel-error">Halaman ini hanya untuk editor dan admin.</p>
           <a href="/peta">Kembali ke peta</a>
         </div>
@@ -87,7 +87,7 @@ export function ImporPage() {
   return (
     <div className="impor">
       <div className="impor-card">
-        <h1>Impor KML</h1>
+        <h1>Impor data</h1>
         <p>Unggah berkas KML atau KMZ, periksa laporan, lalu simpan ke unit SPAM yang dipilih.</p>
 
         <div className="impor-field">
