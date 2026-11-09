@@ -45,7 +45,7 @@ impl Atribut {
 /// - `pipa`: diameter dan material.
 /// - `reservoir`, `bak_penahan_tekanan`, `menara_air`: kapasitas_m3 (volume tampung).
 /// - `intake`, `pompa`, `valve`: debit_lps (debit air yang dilayani atau dilewatkan).
-/// - `hidran_umum`, `meter_induk`, `sr`, `bronkaptering`, `tapping`: nama.
+/// - `hidran_umum`, `meter_induk`, `sr`, `bronkaptering`, `tapping`, `mata_air`: nama.
 pub fn atribut_wajib(t: FeatureType) -> &'static [Atribut] {
     match t {
         FeatureType::Pipa => &[Atribut::DiameterMm, Atribut::Material],
@@ -57,7 +57,8 @@ pub fn atribut_wajib(t: FeatureType) -> &'static [Atribut] {
         | FeatureType::MeterInduk
         | FeatureType::Sr
         | FeatureType::Bronkaptering
-        | FeatureType::Tapping => {
+        | FeatureType::Tapping
+        | FeatureType::MataAir => {
             &[Atribut::Nama]
         }
     }
@@ -372,6 +373,7 @@ mod tests {
             FeatureType::Sr,
             FeatureType::Bronkaptering,
             FeatureType::Tapping,
+            FeatureType::MataAir,
         ] {
             assert!(periksa_atribut(t, &AtributAset::default()).is_err(), "{t:?}");
             let ada = AtributAset { nama: Some("Hidran 1".into()), ..Default::default() };

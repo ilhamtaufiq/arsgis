@@ -204,6 +204,9 @@ fn jenis_titik(nama: Option<&str>) -> Option<FeatureType> {
     let upper = nama?.to_uppercase();
     let words: Vec<&str> = upper.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
     let has_prefix = |prefix: &str| words.iter().any(|w| w.starts_with(prefix));
+    // Kata utuh, dan dua kata yang berurutan.
+    let ada = |kata: &str| words.iter().any(|w| *w == kata);
+    let berurutan = |a: &str, b: &str| words.windows(2).any(|p| p[0] == a && p[1] == b);
     if has_prefix("BRONCAP") || has_prefix("BRONKAP") {
         Some(FeatureType::Bronkaptering)
     } else if upper.contains("VALVE") {
@@ -219,6 +222,21 @@ fn jenis_titik(nama: Option<&str>) -> Option<FeatureType> {
     } else if words.contains(&"SUMUR") {
         // "Sumur Bor" adalah sumber air, dicatat sebagai intake.
         Some(FeatureType::Intake)
+    // Aturan di bawah ditambahkan setelah aturan lama supaya klasifikasi yang sudah ada tidak berubah.
+    // Urutannya dari yang paling spesifik (frasa) ke yang paling umum (satu kata pendek).
+    } else if berurutan("MATA", "AIR") {
+        // Mata air adalah sumber alami, bukan sumur bor.
+        Some(FeatureType::MataAir)
+    } else if ada("BPT") || berurutan("BAK", "TEKAN") || berurutan("BAK", "PENAHAN") {
+        Some(FeatureType::BakPenahanTekanan)
+    } else if berurutan("KRAN", "UMUM") || ada("HIDRAN") || ada("HU") {
+        Some(FeatureType::HidranUmum)
+    } else if has_prefix("MENARA") {
+        Some(FeatureType::MenaraAir)
+    } else if ada("POMPA") || ada("PUMP") {
+        Some(FeatureType::Pompa)
+    } else if ada("METER") || ada("MI") {
+        Some(FeatureType::MeterInduk)
     } else {
         None
     }
@@ -349,6 +367,51 @@ mod tests {
         assert_eq!(jenis_titik(Some("Sumur Bor Eksisting")), Some(FeatureType::Intake));
         // Nama yang hanya mirip tidak ikut terklasifikasi.
         assert_eq!(jenis_titik(Some("SRIGALA 3")), None);
+    }
+
+    #[test]
+    fn kata_kunci_baru_mengenali_jenis_titik() {
+        let cases: [(&str, FeatureType); 17] = [
+            ("POMPA 1", FeatureType::Pompa),
+            ("Pompa Induk Cisalada", FeatureType::Pompa),
+            ("PUMP 2", FeatureType::Pompa),
+            ("pump-station", FeatureType::Pompa),
+            ("METER 3", FeatureType::MeterInduk),
+            ("METER INDUK UTAMA", FeatureType::MeterInduk),
+            ("MI 2", FeatureType::MeterInduk),
+            ("HIDRAN 5", FeatureType::HidranUmum),
+            ("HU 7", FeatureType::HidranUmum),
+            ("Kran Umum 2", FeatureType::HidranUmum),
+            ("MENARA 2", FeatureType::MenaraAir),
+            ("Menara Air Kp. Sukamaju", FeatureType::MenaraAir),
+            ("BPT 1", FeatureType::BakPenahanTekanan),
+            ("Bak Tekan 2", FeatureType::BakPenahanTekanan),
+            ("BAK PENAHAN 3", FeatureType::BakPenahanTekanan),
+            ("MATA AIR CIBEUREUM", FeatureType::MataAir),
+            ("Mata-Air 2", FeatureType::MataAir),
+        ];
+        for (nama, jenis) in cases {
+            assert_eq!(jenis_titik(Some(nama)), Some(jenis), "{nama:?}");
+        }
+    }
+
+    #[test]
+    fn kata_kunci_baru_tidak_cocok_dengan_nama_mirip() {
+        // Nama yang hanya mengandung huruf atau awalan yang sama tidak ikut terklasifikasi.
+        for nama in [
+            "SERVIS 1", "ARVIN 2", "MIRA 3", "HUJAN 4", "BAKAR 5", "POMPAA", "PUMPKIN 6", "HIDRANT",
+            "KRAN 3", "BAK 4", "AIR 2", "MATA 1", "AIR MATA 7", "MENARIK 8", "METERAN 9",
+        ] {
+            assert_eq!(jenis_titik(Some(nama)), None, "{nama:?}");
+        }
+    }
+
+    #[test]
+    fn aturan_lama_tidak_berubah_oleh_kata_kunci_baru() {
+        // SR dan sumur tetap menang atas kata kunci baru, seperti sebelumnya.
+        assert_eq!(jenis_titik(Some("SR 3 POMPA")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("Tapping mata air 1")), Some(FeatureType::Tapping));
+        assert_eq!(jenis_titik(Some("Reservoir pompa")), Some(FeatureType::Reservoir));
     }
 
     #[test]

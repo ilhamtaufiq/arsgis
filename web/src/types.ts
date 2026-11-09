@@ -13,6 +13,7 @@ export type FeatureType =
   | 'pompa'
   | 'meter_induk'
   | 'tapping'
+  | 'mata_air'
 
 export type Network = {
   id: number

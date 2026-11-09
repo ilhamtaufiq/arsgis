@@ -3,6 +3,7 @@ import type { FeatureProperties, FeatureType } from './types'
 import {
   ATRIBUT_KAPASITAS,
   JENIS_SEMUA,
+  LABEL_JENIS,
   NILAI_KOSONG,
   bacaAngka,
   buatPayload,
@@ -26,8 +27,8 @@ const TITIK_VALID = (jenis: FeatureType): NilaiForm => ({
 })
 
 describe('aturan jenis', () => {
-  it('ada dua belas jenis dan pipa satu-satunya garis', () => {
-    expect(JENIS_SEMUA).toHaveLength(12)
+  it('ada tiga belas jenis dan pipa satu-satunya garis', () => {
+    expect(JENIS_SEMUA).toHaveLength(13)
     const garis = JENIS_SEMUA.filter((j) => geometriUntuk(j) === 'LineString')
     expect(garis).toEqual(['pipa'])
   })
@@ -39,6 +40,16 @@ describe('aturan jenis', () => {
     expect(ATRIBUT_KAPASITAS.tapping).toBeUndefined()
     expect(validasiAset('tapping', { ...NILAI_KOSONG }, TAHUN).nama).toBeTruthy()
     expect(validasiAset('tapping', TITIK_VALID('tapping'), TAHUN)).toEqual({})
+  })
+
+  it('mata air adalah titik, wajib nama, dan tidak punya kapasitas atau debit', () => {
+    expect(JENIS_SEMUA).toContain('mata_air')
+    expect(LABEL_JENIS.mata_air).toBe('Mata air')
+    expect(geometriUntuk('mata_air')).toBe('Point')
+    expect(wajibUntuk('mata_air')).toEqual(['nama'])
+    expect(ATRIBUT_KAPASITAS.mata_air).toBeUndefined()
+    expect(validasiAset('mata_air', { ...NILAI_KOSONG }, TAHUN).nama).toBeTruthy()
+    expect(validasiAset('mata_air', TITIK_VALID('mata_air'), TAHUN)).toEqual({})
   })
 
   it('pipa wajib diameter dan material, bukan nama', () => {

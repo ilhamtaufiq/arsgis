@@ -60,10 +60,12 @@ pub enum FeatureType {
     MeterInduk,
     /// Titik sambungan pengambilan air dari pipa (tapping). Bukan data pelanggan; pelanggan tetap lewat SR.
     Tapping,
+    /// Mata air, sumber air alami. Berbeda dari `Intake` (sumur bor).
+    MataAir,
 }
 
 impl FeatureType {
-    pub const ALL: [FeatureType; 12] = [
+    pub const ALL: [FeatureType; 13] = [
         FeatureType::Pipa,
         FeatureType::Valve,
         FeatureType::Reservoir,
@@ -76,6 +78,7 @@ impl FeatureType {
         FeatureType::Pompa,
         FeatureType::MeterInduk,
         FeatureType::Tapping,
+        FeatureType::MataAir,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -92,6 +95,7 @@ impl FeatureType {
             FeatureType::Pompa => "pompa",
             FeatureType::MeterInduk => "meter_induk",
             FeatureType::Tapping => "tapping",
+            FeatureType::MataAir => "mata_air",
         }
     }
 
@@ -356,6 +360,7 @@ mod tests {
             FeatureType::Pompa,
             FeatureType::MeterInduk,
             FeatureType::Tapping,
+            FeatureType::MataAir,
         ] {
             assert_eq!(FeatureType::parse(t.as_str()).unwrap(), t);
             // Serde harus memakai nama teks yang sama dengan database dan API.
@@ -365,7 +370,7 @@ mod tests {
         assert_eq!(FeatureType::parse("bak_penahan_tekanan").unwrap(), FeatureType::BakPenahanTekanan);
         assert!(FeatureType::parse("BPT").is_err());
         assert!(FeatureType::parse("sumur").is_err());
-        assert_eq!(FeatureType::ALL.len(), 12);
+        assert_eq!(FeatureType::ALL.len(), 13);
     }
 
     #[test]
@@ -378,6 +383,20 @@ mod tests {
         assert!(can_read_types(None, &[FeatureType::Tapping]));
         assert!(Role::Viewer.can_read(FeatureType::Tapping));
         assert!(!Role::Viewer.can_read(FeatureType::Sr));
+    }
+
+    #[test]
+    fn mata_air_is_its_own_type_not_sumur_or_customer_data() {
+        assert_eq!(FeatureType::parse("mata_air").unwrap(), FeatureType::MataAir);
+        assert_eq!(FeatureType::MataAir.as_str(), "mata_air");
+        assert!(!FeatureType::MataAir.is_customer_data());
+        assert_ne!(FeatureType::MataAir, FeatureType::Intake);
+        // Nama teks "mata air" dan "mata_air" tidak sama dengan jenis lain.
+        assert!(FeatureType::parse("mata air").is_err());
+        assert!(FeatureType::parse("mata").is_err());
+        // Pengunjung tanpa login boleh membaca mata air, sama seperti tapping.
+        assert!(can_read_types(None, &[FeatureType::MataAir]));
+        assert!(Role::Viewer.can_read(FeatureType::MataAir));
     }
 
     #[test]

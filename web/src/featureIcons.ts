@@ -65,6 +65,12 @@ export const FEATURE_META: Record<FeatureType, FeatureMeta> = {
     // Pipa horizontal dengan cabang ke bawah dan lingkaran kecil di ujungnya: titik sadapan air dari pipa.
     icon: '<path d="M3 8h18M12 8v8"/><circle cx="12" cy="18" r="2"/>',
   },
+  mata_air: {
+    label: 'Mata air',
+    color: '#a21caf',
+    // Tetesan kecil di atas dan gelombang di bawahnya: air yang keluar dari sumber alami.
+    icon: '<path d="M12 3s-4 4.4-4 7.4a4 4 0 0 0 8 0C16 7.4 12 3 12 3z"/><path d="M4 18c1.3-1 2.7-1 4 0s2.7 1 4 0 2.7-1 4 0 2.7 1 4 0"/>',
+  },
   ...Object.fromEntries(
     (Object.keys(ASET_ICON) as AsetBaru[]).map((t) => [
       t,
