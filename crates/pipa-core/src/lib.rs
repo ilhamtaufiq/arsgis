@@ -10,6 +10,13 @@ pub use aset::{
     AtributPatch, Atribut, JenisGeometri, TAHUN_MAKS, TAHUN_MIN,
 };
 
+// Modul O&M (Tahap C). Dipisah dari aset agar tidak bercampur dengan aturan model aset.
+pub mod gangguan;
+pub mod om;
+pub mod perawatan;
+pub mod rehab;
+pub mod tanggal;
+
 #[derive(Debug, Error, PartialEq)]
 pub enum CoreError {
     #[error("jenis fitur tidak dikenal: {0}")]
