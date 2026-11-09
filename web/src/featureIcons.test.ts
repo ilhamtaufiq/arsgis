@@ -4,7 +4,7 @@ import type { FeatureType } from './types'
 
 const SEMUA: FeatureType[] = [
   'pipa', 'valve', 'reservoir', 'sr', 'bronkaptering', 'bak_penahan_tekanan',
-  'menara_air', 'hidran_umum', 'intake', 'pompa', 'meter_induk', 'tapping',
+  'menara_air', 'hidran_umum', 'intake', 'pompa', 'meter_induk', 'tapping', 'mata_air',
 ]
 
 describe('ikon jenis fitur', () => {
@@ -31,6 +31,20 @@ describe('ikon jenis fitur', () => {
     // Tapping tidak ikut status cakupan karena bukan sambungan rumah.
     expect(warnaFitur('tapping', false)).toBe(FEATURE_META.tapping.color)
     expect(ikonHtml('tapping', null, 20)).toContain(`background:${FEATURE_META.tapping.color}`)
+  })
+
+  it('mata air punya label, warna, dan ikon sendiri, berbeda dari intake dan tapping', () => {
+    expect(FEATURE_META.mata_air.label).toBe('Mata air')
+    expect(FEATURE_META.mata_air.color).toMatch(/^#[0-9a-f]{6}$/i)
+    for (const lain of ['pipa', 'reservoir', 'bronkaptering', 'tapping', 'intake', 'menara_air', 'bak_penahan_tekanan', 'meter_induk', 'pompa', 'hidran_umum', 'sr', 'valve'] as const) {
+      expect(FEATURE_META.mata_air.color, lain).not.toBe(FEATURE_META[lain].color)
+    }
+    // Ikon tetesan dengan gelombang di bawahnya, bukan ikon bronkaptering atau sumur.
+    expect(FEATURE_META.mata_air.icon).toContain('<path')
+    expect(FEATURE_META.mata_air.icon).not.toBe(FEATURE_META.bronkaptering.icon)
+    expect(FEATURE_META.mata_air.icon).not.toBe(FEATURE_META.intake.icon)
+    expect(warnaFitur('mata_air', false)).toBe(FEATURE_META.mata_air.color)
+    expect(ikonHtml('mata_air', null, 20)).toContain(`background:${FEATURE_META.mata_air.color}`)
   })
 
   it('jenis lain tidak terpengaruh status cakupan', () => {

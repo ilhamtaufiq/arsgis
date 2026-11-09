@@ -11,6 +11,7 @@ const URUTAN: FeatureType[] = [
   'bronkaptering',
   'sr',
   'intake',
+  'mata_air',
   'pompa',
   'bak_penahan_tekanan',
   'menara_air',
