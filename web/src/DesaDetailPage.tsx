@@ -1,18 +1,32 @@
 import './preflight.css'
-import { useQuery } from '@tanstack/react-query'
-import { fetchMe } from './api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, type ChangeEvent } from 'react'
+import { fetchMe, type Role } from './api'
 import { AuthPanel } from './Auth'
-import { fetchDesaDetail } from './desaDetailApi'
+import {
+  fetchDesaDetail,
+  fetchDesaPokmas,
+  hapusDesaPokmas,
+  simpanDesaPokmas,
+  type IsianPokmas,
+  type PokmasEfektif,
+  type SumberPokmas,
+} from './desaDetailApi'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const nf = (n: number) => n.toLocaleString('id-ID')
 
 export function DesaDetailPage({ id }: { id: number }) {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe })
+  // Peran ikut di kunci query agar data ulang dimuat setelah login: nama pengurus hanya dikirim untuk editor.
+  const role: Role | null = me.data?.role ?? null
   const detail = useQuery({
-    queryKey: ['desa-detail', id],
+    queryKey: ['desa-detail', id, role],
     queryFn: () => fetchDesaDetail(id),
     enabled: Number.isFinite(id) && id > 0,
   })
@@ -96,40 +110,214 @@ export function DesaDetailPage({ id }: { id: number }) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Pokmas</CardTitle>
-              <CardDescription>Kelompok masyarakat pengelola SPAM di desa ini</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!d.pokmas ? (
-                <p className="text-sm text-muted-foreground">Profil Pokmas belum terisi.</p>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field label="Nama Pokmas" value={d.pokmas.nama} />
-                  <Field label="Perdes" value={d.pokmas.perdes} />
-                  {d.pokmas.konflik && (
-                    <div className="md:col-span-2">
-                      <Badge variant="destructive">Ada perbedaan nama Pokmas antar unit</Badge>
-                    </div>
-                  )}
-                  {d.pokmas.kepala !== undefined ? (
-                    <>
-                      <Field label="Kepala" value={d.pokmas.kepala ?? null} />
-                      <Field label="Bendahara" value={d.pokmas.bendahara ?? null} />
-                      <Field label="Sekretaris" value={d.pokmas.sekretaris ?? null} />
-                    </>
-                  ) : (
-                    <p className="text-xs text-muted-foreground md:col-span-2">
-                      Nama pengurus hanya terlihat untuk editor dan admin.
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <PokmasCard id={id} role={role} />
         </div>
       )}
+    </div>
+  )
+}
+
+function PokmasCard({ id, role }: { id: number; role: Role | null }) {
+  const queryClient = useQueryClient()
+  const bisaEdit = role === 'editor' || role === 'admin'
+  const [mengedit, setMengedit] = useState(false)
+  const [pesan, setPesan] = useState<string | null>(null)
+  const pokmas = useQuery({
+    queryKey: ['desa-pokmas', id, role],
+    queryFn: () => fetchDesaPokmas(id),
+    enabled: Number.isFinite(id) && id > 0,
+  })
+
+  const selesai = () => {
+    setPesan(null)
+    setMengedit(false)
+    void queryClient.invalidateQueries({ queryKey: ['desa-pokmas', id] })
+    void queryClient.invalidateQueries({ queryKey: ['desa-detail', id] })
+  }
+  const simpan = useMutation({
+    mutationFn: (isian: IsianPokmas) => simpanDesaPokmas(id, isian),
+    onSuccess: selesai,
+    onError: (e) => setPesan((e as Error).message),
+  })
+  const kembalikan = useMutation({
+    mutationFn: () => hapusDesaPokmas(id),
+    onSuccess: selesai,
+    onError: (e) => setPesan((e as Error).message),
+  })
+  const sedangKirim = simpan.isPending || kembalikan.isPending
+  const data = pokmas.data
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">Pokmas</CardTitle>
+            <CardDescription>Kelompok masyarakat pengelola SPAM di desa ini</CardDescription>
+          </div>
+          {data && <SumberBadge sumber={data.sumber} />}
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {pokmas.isLoading && <p className="text-sm text-muted-foreground">Memuat data Pokmas…</p>}
+        {pokmas.isError && <p className="text-sm text-destructive">{(pokmas.error as Error).message}</p>}
+
+        {data && mengedit && (
+          <FormPokmas data={data} sedangKirim={sedangKirim} onSimpan={(isian) => simpan.mutate(isian)} onBatal={() => { setPesan(null); setMengedit(false) }} />
+        )}
+
+        {data && !mengedit && (
+          <>
+            {!data.pokmas ? (
+              <p className="text-sm text-muted-foreground">Profil Pokmas belum terisi.</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Nama Pokmas" value={data.pokmas.nama} />
+                <Field label="Perdes" value={data.pokmas.perdes} />
+                {data.pokmas.konflik && (
+                  <div className="md:col-span-2">
+                    <Badge variant="destructive">Ada perbedaan nama Pokmas antar unit</Badge>
+                  </div>
+                )}
+                {data.pokmas.kepala !== undefined ? (
+                  <>
+                    <Field label="Kepala" value={data.pokmas.kepala ?? null} />
+                    <Field label="Bendahara" value={data.pokmas.bendahara ?? null} />
+                    <Field label="Sekretaris" value={data.pokmas.sekretaris ?? null} />
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground md:col-span-2">
+                    Nama pengurus hanya terlihat untuk editor dan admin.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              {data.sumber === 'override'
+                ? `Dikoreksi di arsgis${data.koreksi ? ` oleh ${data.koreksi.diperbarui_oleh} pada ${data.koreksi.diperbarui_pada}` : ''}. Data hasil sinkron Arumanis tidak ikut berubah.`
+                : 'Data hasil sinkron dari Arumanis.'}
+              {data.koreksi?.catatan ? ` Catatan: ${data.koreksi.catatan}` : ''}
+            </p>
+
+            {bisaEdit && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={sedangKirim} onClick={() => { setPesan(null); setMengedit(true) }}>
+                  {data.pokmas ? 'Ubah Pokmas' : 'Isi Pokmas'}
+                </Button>
+                {data.sumber === 'override' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sedangKirim}
+                    onClick={() => {
+                      if (window.confirm('Kembalikan Pokmas desa ini ke data Arumanis? Koreksi yang tersimpan di arsgis akan dihapus.')) {
+                        kembalikan.mutate()
+                      }
+                    }}
+                  >
+                    Kembalikan ke data Arumanis
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {pesan && <p className="text-sm text-destructive">{pesan}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SumberBadge({ sumber }: { sumber: SumberPokmas }) {
+  return sumber === 'override' ? (
+    <Badge>Koreksi arsgis</Badge>
+  ) : (
+    <Badge variant="secondary">Data Arumanis</Badge>
+  )
+}
+
+function FormPokmas({
+  data,
+  sedangKirim,
+  onSimpan,
+  onBatal,
+}: {
+  data: PokmasEfektif
+  sedangKirim: boolean
+  onSimpan: (isian: IsianPokmas) => void
+  onBatal: () => void
+}) {
+  const [isian, setIsian] = useState<IsianPokmas>(() => ({
+    nama: data.pokmas?.nama ?? '',
+    perdes: data.pokmas?.perdes ?? '',
+    kepala: data.pokmas?.kepala ?? '',
+    bendahara: data.pokmas?.bendahara ?? '',
+    sekretaris: data.pokmas?.sekretaris ?? '',
+    catatan: data.koreksi?.catatan ?? '',
+  }))
+  const ubah = (kunci: keyof IsianPokmas) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setIsian((s) => ({ ...s, [kunci]: e.target.value }))
+
+  return (
+    <form
+      className="grid gap-3 md:grid-cols-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSimpan(isian)
+      }}
+    >
+      <CampoIsian id="pokmas-nama" label="Nama Pokmas" wajib value={isian.nama} onChange={ubah('nama')} maks={200} />
+      <CampoIsian id="pokmas-perdes" label="Perdes" value={isian.perdes} onChange={ubah('perdes')} maks={200} />
+      <CampoIsian id="pokmas-kepala" label="Kepala" value={isian.kepala} onChange={ubah('kepala')} maks={120} />
+      <CampoIsian id="pokmas-bendahara" label="Bendahara" value={isian.bendahara} onChange={ubah('bendahara')} maks={120} />
+      <CampoIsian id="pokmas-sekretaris" label="Sekretaris" value={isian.sekretaris} onChange={ubah('sekretaris')} maks={120} />
+      <div className="grid gap-1.5 md:col-span-2">
+        <Label htmlFor="pokmas-catatan">Catatan</Label>
+        <textarea
+          id="pokmas-catatan"
+          rows={3}
+          maxLength={1000}
+          value={isian.catatan}
+          onChange={ubah('catatan')}
+          className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2 md:col-span-2">
+        <Button type="submit" size="sm" disabled={sedangKirim || isian.nama.trim() === ''}>
+          {sedangKirim ? 'Menyimpan…' : 'Simpan'}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={sedangKirim} onClick={onBatal}>
+          Batal
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function CampoIsian({
+  id,
+  label,
+  value,
+  onChange,
+  maks,
+  wajib = false,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void
+  maks: number
+  wajib?: boolean
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>
+        {label}
+        {wajib ? ' *' : ''}
+      </Label>
+      <Input id={id} value={value} onChange={onChange} maxLength={maks} required={wajib} />
     </div>
   )
 }

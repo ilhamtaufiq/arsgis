@@ -10,6 +10,11 @@ mod catalog_input;
 pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, RiwayatAset, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
 
+mod pokmas;
+pub use pokmas::{
+    efektifkan, PokmasDetail, PokmasEfektif, PokmasInput, PokmasIsian, PokmasOverride, SumberPokmas,
+};
+
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 /// Batas jumlah fitur per permintaan. Di atas ini, gunakan vector tiles (fase lanjutan).
@@ -1051,11 +1056,75 @@ impl Store {
         })
         .collect();
 
-        let pokmas = sqlx::query(
+        let efektif = efektifkan(self.pokmas_sinkron(id).await?, self.pokmas_koreksi(id).await?);
+        Ok(Some(DesaDetail { summary, units, pokmas: efektif.pokmas, pokmas_sumber: efektif.sumber }))
+    }
+
+    /// Pokmas efektif satu desa beserta koreksinya. None bila desa tidak ada atau tidak aktif.
+    pub async fn pokmas_detail(&self, desa_id: i64) -> Result<Option<PokmasDetail>, StoreError> {
+        if !self.desa_aktif(desa_id).await? {
+            return Ok(None);
+        }
+        let koreksi = self.pokmas_koreksi(desa_id).await?;
+        let efektif = efektifkan(self.pokmas_sinkron(desa_id).await?, koreksi.clone());
+        Ok(Some(PokmasDetail { efektif, koreksi }))
+    }
+
+    /// Simpan koreksi Pokmas (insert atau ganti). False bila desa tidak ada atau tidak aktif.
+    pub async fn simpan_pokmas_koreksi(
+        &self,
+        desa_id: i64,
+        isian: &PokmasIsian,
+        oleh: &str,
+    ) -> Result<bool, StoreError> {
+        let diperbarui = sqlx::query(
+            "INSERT INTO pokmas_override (desa_id, nama, perdes, kepala, bendahara, sekretaris, catatan, \
+                                          diperbarui_oleh, diperbarui_pada) \
+             SELECT d.id, $2, $3, $4, $5, $6, $7, $8, now() FROM ref_desa d WHERE d.id = $1 AND d.aktif \
+             ON CONFLICT (desa_id) DO UPDATE SET nama = EXCLUDED.nama, perdes = EXCLUDED.perdes, \
+               kepala = EXCLUDED.kepala, bendahara = EXCLUDED.bendahara, sekretaris = EXCLUDED.sekretaris, \
+               catatan = EXCLUDED.catatan, diperbarui_oleh = EXCLUDED.diperbarui_oleh, \
+               diperbarui_pada = EXCLUDED.diperbarui_pada",
+        )
+        .bind(desa_id)
+        .bind(&isian.nama)
+        .bind(&isian.perdes)
+        .bind(&isian.kepala)
+        .bind(&isian.bendahara)
+        .bind(&isian.sekretaris)
+        .bind(&isian.catatan)
+        .bind(oleh)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        Ok(diperbarui > 0)
+    }
+
+    /// Hapus koreksi Pokmas sehingga desa kembali ke data Arumanis. Tanpa efek bila tidak ada koreksi.
+    pub async fn hapus_pokmas_koreksi(&self, desa_id: i64) -> Result<(), StoreError> {
+        sqlx::query("DELETE FROM pokmas_override WHERE desa_id = $1")
+            .bind(desa_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// True bila desa ada di referensi dan aktif.
+    pub async fn desa_aktif(&self, desa_id: i64) -> Result<bool, StoreError> {
+        Ok(sqlx::query("SELECT 1 FROM ref_desa WHERE id = $1 AND aktif")
+            .bind(desa_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .is_some())
+    }
+
+    /// Pokmas hasil sinkron Arumanis untuk satu desa.
+    async fn pokmas_sinkron(&self, desa_id: i64) -> Result<Option<PokmasDesa>, StoreError> {
+        Ok(sqlx::query(
             "SELECT nama, perdes, konflik, kepala, bendahara, sekretaris, sumber_unit_ids \
              FROM ref_pokmas WHERE desa_id = $1",
         )
-        .bind(id)
+        .bind(desa_id)
         .fetch_optional(&self.pool)
         .await?
         .map(|r| PokmasDesa {
@@ -1066,9 +1135,29 @@ impl Store {
             bendahara: r.get("bendahara"),
             sekretaris: r.get("sekretaris"),
             sumber_unit_ids: r.get("sumber_unit_ids"),
-        });
+        }))
+    }
 
-        Ok(Some(DesaDetail { summary, units, pokmas }))
+    /// Koreksi Pokmas yang diisi di arsgis untuk satu desa.
+    async fn pokmas_koreksi(&self, desa_id: i64) -> Result<Option<PokmasOverride>, StoreError> {
+        Ok(sqlx::query(
+            "SELECT nama, perdes, kepala, bendahara, sekretaris, catatan, diperbarui_oleh, \
+                    to_char(diperbarui_pada, 'YYYY-MM-DD HH24:MI:SS') AS diperbarui_pada \
+             FROM pokmas_override WHERE desa_id = $1",
+        )
+        .bind(desa_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|r| PokmasOverride {
+            nama: r.get("nama"),
+            perdes: r.get("perdes"),
+            kepala: r.get("kepala"),
+            bendahara: r.get("bendahara"),
+            sekretaris: r.get("sekretaris"),
+            catatan: r.get("catatan"),
+            diperbarui_oleh: r.get("diperbarui_oleh"),
+            diperbarui_pada: r.get("diperbarui_pada"),
+        }))
     }
 
     /// Daftar desa aktif dengan capaian SPM. Tidak memuat nama pengurus Pokmas.
@@ -1096,8 +1185,8 @@ impl Store {
 /// Kolom ringkasan desa. Pokmas hanya diwakili oleh flag, nama pengurus tidak ikut.
 const DESA_SUMMARY_SQL: &str = "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, \
     d.bjp_master + d.bjp_unit AS bjp_kk, d.sr, d.jiwa, d.unit_count, \
-    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik \
-    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id";
+    (o.desa_id IS NOT NULL OR p.nama IS NOT NULL) AS punya_pokmas, (o.desa_id IS NULL AND COALESCE(p.konflik, false)) AS pokmas_konflik \
+    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id LEFT JOIN pokmas_override o ON o.desa_id = d.id";
 
 fn desa_summary_from_row(r: &PgRow) -> DesaSummary {
     let target: i32 = r.get("target_kk");
@@ -1125,9 +1214,9 @@ fn desa_summary_from_row(r: &PgRow) -> DesaSummary {
 /// Sama dengan `DESA_SUMMARY_SQL`, ditambah geometri batas desa (kolom `geometry`).
 const DESA_SUMMARY_GEO_SQL: &str = "SELECT d.id, d.nama, d.kecamatan, d.kode_bps, d.target_kk, d.jp_kk, \
     d.bjp_master + d.bjp_unit AS bjp_kk, d.sr, d.jiwa, d.unit_count, \
-    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik, \
+    (o.desa_id IS NOT NULL OR p.nama IS NOT NULL) AS punya_pokmas, (o.desa_id IS NULL AND COALESCE(p.konflik, false)) AS pokmas_konflik, \
     ST_AsGeoJSON(b.geom)::text AS geometry \
-    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id";
+    FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id LEFT JOIN pokmas_override o ON o.desa_id = d.id";
 
 /// Desa dengan poligon batasnya (teks GeoJSON).
 #[derive(Debug, Clone)]
@@ -1189,7 +1278,7 @@ impl Store {
     pub async fn kelengkapan_desa(&self) -> Result<Vec<KelengkapanDesa>, StoreError> {
         let rows = sqlx::query(
             "SELECT d.id, d.nama, d.kecamatan, d.kode_bps IS NOT NULL AS punya_batas, \
-                    (p.nama IS NOT NULL) AS punya_pokmas, COALESCE(p.konflik, false) AS pokmas_konflik, \
+                    (o.desa_id IS NOT NULL OR p.nama IS NOT NULL) AS punya_pokmas, (o.desa_id IS NULL AND COALESCE(p.konflik, false)) AS pokmas_konflik, \
                     d.sr AS sr_tercatat, d.unit_count, \
                     (SELECT COUNT(*) FROM features f JOIN networks n ON n.id = f.network_id \
                        WHERE n.desa_id = d.id AND n.unit_spam_id IS NOT NULL AND f.deleted_at IS NULL \
@@ -1197,7 +1286,7 @@ impl Store {
                     (SELECT COALESCE(SUM(f.panjang_m), 0)::float8 / 1000.0 FROM features f JOIN networks n ON n.id = f.network_id \
                        WHERE n.desa_id = d.id AND n.unit_spam_id IS NOT NULL AND f.deleted_at IS NULL \
                          AND f.feature_type = 'pipa') AS pipa_km \
-             FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id \
+             FROM ref_desa d LEFT JOIN ref_pokmas p ON p.desa_id = d.id LEFT JOIN pokmas_override o ON o.desa_id = d.id \
              WHERE d.aktif ORDER BY d.kecamatan, d.nama",
         )
         .fetch_all(&self.pool)
@@ -1387,10 +1476,11 @@ pub struct PokmasDesa {
     pub sumber_unit_ids: Vec<i64>,
 }
 
-/// Detail desa untuk halaman detail: ringkasan, unit SPAM, dan Pokmas.
+/// Detail desa untuk halaman detail: ringkasan, unit SPAM, dan Pokmas efektif beserta asalnya.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DesaDetail {
     pub summary: DesaSummary,
     pub units: Vec<UnitDesa>,
     pub pokmas: Option<PokmasDesa>,
+    pub pokmas_sumber: SumberPokmas,
 }
