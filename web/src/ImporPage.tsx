@@ -5,6 +5,7 @@ import { commitImport, uploadKml, type StagedImport } from './importApi'
 import { pesanDuplikat, pesanGalatSimpan } from './importLogic'
 import { fetchPekerjaan } from './pekerjaanApi'
 import { LABEL_JENIS } from './asetForm'
+import { ImporDaftar } from './ImporDaftar'
 import type { FeatureType } from './types'
 import './aset.css'
 
@@ -177,6 +178,7 @@ export function ImporPage() {
         {pesan && <p role="status">{pesan}</p>}
       </div>
 
+      <ImporDaftar />
     </div>
   )
 }
