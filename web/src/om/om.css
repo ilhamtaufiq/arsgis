@@ -1,0 +1,114 @@
+/* Gaya operasi dan pemeliharaan (Tahap C). Nama kelas berawalan om- agar tidak bentrok dengan styles.css. */
+
+.om-halaman {
+  box-sizing: border-box;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  font-size: 14px;
+  color: inherit;
+}
+
+.om-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+}
+.om-header h1 { margin: 0; font-size: 20px; }
+.om-kicker { margin: 0; font-size: 12px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.om-tab { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.om-dua-kolom { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.om-kolom { min-width: 0; display: grid; gap: 12px; align-content: start; }
+@media (min-width: 900px) {
+  .om-dua-kolom { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+}
+
+.om-panel { display: grid; gap: 12px; min-width: 0; }
+
+.om-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px; }
+
+.om-field { display: grid; gap: 4px; font-size: 13px; min-width: 0; }
+.om-field input,
+.om-field select,
+.om-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.om-inline { display: inline-flex; align-items: center; gap: 6px; }
+.om-inline select { width: auto; }
+
+:is(.om-halaman, .om-panel, .om-dua-kolom, .om-aset) button {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+:is(.om-halaman, .om-panel, .om-dua-kolom, .om-aset) button:disabled { opacity: 0.5; cursor: default; }
+:is(.om-halaman, .om-panel, .om-dua-kolom, .om-aset) button[aria-pressed="true"] { background: color-mix(in srgb, currentColor 14%, transparent); font-weight: 600; }
+.om-kecil { margin-left: 8px; padding: 2px 6px; font-size: 12px; }
+
+.om-baris { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.om-baris > .om-field { flex: 1 1 120px; }
+
+.om-form { display: grid; gap: 10px; min-width: 0; }
+.om-fieldset { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 8px; padding: 10px; display: grid; gap: 8px; margin: 0; min-width: 0; }
+
+.om-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.om-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+}
+.om-item-aktif { border-color: currentColor; }
+.om-item-judul { font-weight: 600; overflow-wrap: anywhere; }
+
+.om-list-ringkas { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.om-bagian { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); min-width: 0; }
+.om-bagian h4 { margin: 4px 0 0; font-size: 13px; }
+.om-aset h3 { margin: 12px 0 0; font-size: 14px; }
+.om-aset p { margin: 0; overflow-wrap: anywhere; }
+
+.om-muted { opacity: 0.7; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.om-error { color: #b91c1c; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+.om-tabel { width: 100%; border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
+.om-tabel th,
+.om-tabel td { text-align: left; padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); vertical-align: top; }
+
+.om-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, currentColor 12%, transparent); }
+.om-badge-terlambat { background: #fee2e2; color: #991b1b; }
+.om-badge-hari_ini { background: #fef3c7; color: #92400e; }
+.om-badge-segera { background: #e0f2fe; color: #075985; }
+
+.om-detail { display: grid; gap: 10px; min-width: 0; }
+.om-detail h3 { margin: 0; }
+.om-dl { margin: 0; display: grid; gap: 6px; }
+.om-dl > div { display: grid; grid-template-columns: minmax(90px, auto) minmax(0, 1fr); gap: 8px; }
+.om-dl dt { opacity: 0.7; }
+.om-dl dd { margin: 0; overflow-wrap: anywhere; }
+.om-deskripsi { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.om-foto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.om-foto { width: 100%; height: auto; border-radius: 6px; object-fit: cover; aspect-ratio: 4 / 3; }
+
+.om-riwayat summary { cursor: pointer; font-size: 13px; }
+.om-riwayat-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+
+.om-link { font-size: 13px; text-decoration: underline; color: inherit; }
