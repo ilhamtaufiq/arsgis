@@ -4,6 +4,12 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+mod aset;
+pub use aset::{
+    atribut_wajib, jenis_geometri, normalisasi_geometri, periksa_atribut, periksa_kondisi, AsetError, AtributAset,
+    AtributPatch, Atribut, JenisGeometri, TAHUN_MAKS, TAHUN_MIN,
+};
+
 #[derive(Debug, Error, PartialEq)]
 pub enum CoreError {
     #[error("jenis fitur tidak dikenal: {0}")]
@@ -184,6 +190,11 @@ impl Role {
         }
     }
 
+    /// Menulis aset (tambah, ubah, hapus) hanya untuk editor dan admin.
+    pub fn can_write(self) -> bool {
+        self >= Role::Editor
+    }
+
     /// Data pelanggan (sr) hanya untuk editor dan admin.
     pub fn can_read(self, t: FeatureType) -> bool {
         !t.is_customer_data() || self >= Role::Editor
@@ -361,6 +372,13 @@ mod tests {
         assert!(can_read_types(Some(Role::Editor), &[FeatureType::Sr]));
         assert_eq!(Role::parse("admin").unwrap(), Role::Admin);
         assert!(Role::parse("root").is_err());
+    }
+
+    #[test]
+    fn role_can_write_only_editor_and_admin() {
+        assert!(!Role::Viewer.can_write());
+        assert!(Role::Editor.can_write());
+        assert!(Role::Admin.can_write());
     }
 
     #[test]

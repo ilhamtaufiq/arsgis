@@ -21,8 +21,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use pipa_core::{can_read_types, parse_types, Bbox, CoreError, FeatureType, Role};
-use pipa_store::{CatalogInput, CatalogPatch, CommitOutcome, Store, StoreError, StagingRow};
+use pipa_core::{can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Role};
+use pipa_store::{
+    fitur_geojson, AsetBaru, AsetUbah, CatalogInput, CatalogPatch, CommitOutcome, Store, StoreError, StagingRow,
+    TulisHasil,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
@@ -252,7 +255,7 @@ impl FromRequestParts<AppState> for Editor {
             .and_then(|t| verify_token(t, &state.jwt_secret))
             .ok_or_else(ApiError::unauthorized)?;
         if user.role < Role::Editor {
-            return Err(ApiError(StatusCode::FORBIDDEN, "impor butuh peran editor atau admin".into()));
+            return Err(ApiError(StatusCode::FORBIDDEN, "aksi ini butuh peran editor atau admin".into()));
         }
         Ok(Editor(user))
     }
@@ -649,6 +652,75 @@ async fn admin_sync_runs(State(state): State<AppState>, _: Admin) -> Result<Json
     Ok(Json(json!({ "data": runs, "interval_menit": state.syncer.interval_menit() })))
 }
 
+/// Isian POST /api/v1/features. Atribut ikut di tingkat atas body, sama dengan nama kolomnya.
+#[derive(Deserialize)]
+struct AsetBaruBody {
+    network_id: i64,
+    feature_type: String,
+    geometry: Value,
+    #[serde(flatten)]
+    atribut: AtributAset,
+}
+
+fn parse_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, ApiError> {
+    serde_json::from_slice(body).map_err(|e| bad_request(&format!("isian tidak valid: {e}")))
+}
+
+/// 400 untuk isian yang tidak well-formed, 422 untuk aturan bisnis.
+fn aset_error(e: AsetError) -> ApiError {
+    match e {
+        AsetError::Masukan(m) => ApiError(StatusCode::BAD_REQUEST, m),
+        AsetError::Aturan(daftar) => ApiError(StatusCode::UNPROCESSABLE_ENTITY, daftar.join("; ")),
+    }
+}
+
+fn hasil_tulis<T>(h: TulisHasil<T>) -> Result<T, ApiError> {
+    match h {
+        TulisHasil::Berhasil(v) => Ok(v),
+        TulisHasil::TidakAda => Err(ApiError(StatusCode::NOT_FOUND, "data tidak ditemukan".into())),
+        TulisHasil::Ditolak(e) => Err(aset_error(e)),
+    }
+}
+
+async fn create_feature(State(state): State<AppState>, Editor(user): Editor, body: Bytes) -> Result<Response, ApiError> {
+    let b: AsetBaruBody = parse_body(&body)?;
+    let feature_type = FeatureType::parse(&b.feature_type)?;
+    let baru = AsetBaru { network_id: b.network_id, feature_type, geometry: b.geometry, atribut: b.atribut };
+    let fitur = hasil_tulis(state.store.tambah_aset(baru, &user.username).await?)?;
+    Ok((StatusCode::CREATED, Json(json!({ "data": fitur_geojson(&fitur) }))).into_response())
+}
+
+async fn patch_feature(
+    State(state): State<AppState>,
+    Editor(user): Editor,
+    Path(id): Path<i64>,
+    body: Bytes,
+) -> Result<Json<Value>, ApiError> {
+    let mut v: Value = parse_body(&body)?;
+    let obj = v.as_object_mut().ok_or_else(|| bad_request("isian harus berupa objek JSON"))?;
+    let geometry = obj.remove("geometry");
+    if matches!(geometry, Some(Value::Null)) {
+        return Err(bad_request("geometry tidak boleh null"));
+    }
+    let atribut: AtributPatch = serde_json::from_value(v).map_err(|e| bad_request(&format!("isian tidak valid: {e}")))?;
+    let fitur = hasil_tulis(state.store.ubah_aset(id, AsetUbah { geometry, atribut }, &user.username).await?)?;
+    Ok(Json(json!({ "data": fitur_geojson(&fitur) })))
+}
+
+async fn delete_feature(State(state): State<AppState>, Editor(user): Editor, Path(id): Path<i64>) -> Result<Response, ApiError> {
+    hasil_tulis(state.store.hapus_aset(id, &user.username).await?)?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+async fn feature_riwayat(State(state): State<AppState>, _: Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
+    let riwayat = state
+        .store
+        .riwayat_aset(id)
+        .await?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "data tidak ditemukan".into()))?;
+    Ok(Json(json!({ "data": riwayat })))
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -662,6 +734,12 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/networks", get(list_networks))
         .route("/api/v1/networks/{id}/geojson", get(network_geojson))
         .route("/api/v1/features/geojson", get(all_geojson))
+        .route("/api/v1/features", post(create_feature))
+        .route(
+            "/api/v1/features/{id}",
+            axum::routing::patch(patch_feature).delete(delete_feature),
+        )
+        .route("/api/v1/features/{id}/riwayat", get(feature_riwayat))
         .route(
             "/api/v1/imports",
             post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),

@@ -5,7 +5,9 @@ use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::Row;
 use thiserror::Error;
 
+mod aset;
 mod catalog_input;
+pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, RiwayatAset, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -25,6 +27,9 @@ pub enum StoreError {
     Duplicate,
     #[error("isian tidak memenuhi aturan tabel")]
     Constraint,
+    /// Data di database tidak sesuai aturan aplikasi (mis. feature_type lama yang tidak dikenal).
+    #[error("data tidak konsisten: {0}")]
+    Data(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
