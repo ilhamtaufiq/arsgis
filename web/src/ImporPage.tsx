@@ -6,6 +6,7 @@ import { pesanDuplikat, pesanGalatSimpan } from './importLogic'
 import { fetchPekerjaan } from './pekerjaanApi'
 import { LABEL_JENIS } from './asetForm'
 import { ImporDaftar } from './ImporDaftar'
+import { PanelAsetTerhapus } from './AsetTerhapus'
 import type { FeatureType } from './types'
 import './aset.css'
 
@@ -179,6 +180,7 @@ export function ImporPage() {
       </div>
 
       <ImporDaftar />
+      <PanelAsetTerhapus />
     </div>
   )
 }
