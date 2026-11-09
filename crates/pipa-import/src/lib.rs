@@ -210,8 +210,11 @@ fn jenis_titik(nama: Option<&str>) -> Option<FeatureType> {
         Some(FeatureType::Valve)
     } else if upper.contains("RESERVOIR") || words.contains(&"RV") {
         Some(FeatureType::Reservoir)
-    } else if words.contains(&"SR") || has_prefix("TAPPING") {
-        // "SR 1" dan titik tapping pipa adalah titik pengambilan air ke pelanggan.
+    } else if has_prefix("TAPPING") {
+        // Titik tapping pipa adalah sambungan pengambilan air dari pipa, bukan SR pelanggan.
+        Some(FeatureType::Tapping)
+    } else if words.contains(&"SR") {
+        // "SR 1" adalah titik pengambilan air ke pelanggan.
         Some(FeatureType::Sr)
     } else if words.contains(&"SUMUR") {
         // "Sumur Bor" adalah sumber air, dicatat sebagai intake.
@@ -334,12 +337,15 @@ mod tests {
     }
 
     #[test]
-    fn kmz_asbuilt_names_map_to_sr_and_intake() {
+    fn kmz_asbuilt_names_map_to_sr_tapping_and_intake() {
         // Nama dari berkas as-built Babakan Sari: SR bernomor, tapping pipa, dan sumur bor.
         assert_eq!(jenis_titik(Some("SR 1")), Some(FeatureType::Sr));
         assert_eq!(jenis_titik(Some("SR 40")), Some(FeatureType::Sr));
-        assert_eq!(jenis_titik(Some("Tapping poin pipa 1.5 in")), Some(FeatureType::Sr));
-        assert_eq!(jenis_titik(Some("Tapping pipa 2 in babakansari")), Some(FeatureType::Sr));
+        assert_eq!(jenis_titik(Some("Tapping poin pipa 1.5 in")), Some(FeatureType::Tapping));
+        assert_eq!(jenis_titik(Some("Tapping pipa 2 in babakansari")), Some(FeatureType::Tapping));
+        assert_eq!(jenis_titik(Some("tapping pipa 1 in")), Some(FeatureType::Tapping));
+        // Kata SR di tengah nama tapping tidak mengubah jenisnya: awalan TAPPING yang menang.
+        assert_eq!(jenis_titik(Some("Tapping SR 3")), Some(FeatureType::Tapping));
         assert_eq!(jenis_titik(Some("Sumur Bor Eksisting")), Some(FeatureType::Intake));
         // Nama yang hanya mirip tidak ikut terklasifikasi.
         assert_eq!(jenis_titik(Some("SRIGALA 3")), None);

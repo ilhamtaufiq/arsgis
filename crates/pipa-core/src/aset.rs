@@ -45,7 +45,7 @@ impl Atribut {
 /// - `pipa`: diameter dan material.
 /// - `reservoir`, `bak_penahan_tekanan`, `menara_air`: kapasitas_m3 (volume tampung).
 /// - `intake`, `pompa`, `valve`: debit_lps (debit air yang dilayani atau dilewatkan).
-/// - `hidran_umum`, `meter_induk`, `sr`, `bronkaptering`: nama.
+/// - `hidran_umum`, `meter_induk`, `sr`, `bronkaptering`, `tapping`: nama.
 pub fn atribut_wajib(t: FeatureType) -> &'static [Atribut] {
     match t {
         FeatureType::Pipa => &[Atribut::DiameterMm, Atribut::Material],
@@ -53,7 +53,11 @@ pub fn atribut_wajib(t: FeatureType) -> &'static [Atribut] {
             &[Atribut::KapasitasM3]
         }
         FeatureType::Intake | FeatureType::Pompa | FeatureType::Valve => &[Atribut::DebitLps],
-        FeatureType::HidranUmum | FeatureType::MeterInduk | FeatureType::Sr | FeatureType::Bronkaptering => {
+        FeatureType::HidranUmum
+        | FeatureType::MeterInduk
+        | FeatureType::Sr
+        | FeatureType::Bronkaptering
+        | FeatureType::Tapping => {
             &[Atribut::Nama]
         }
     }
@@ -362,7 +366,13 @@ mod tests {
 
     #[test]
     fn nama_wajib_untuk_titik_tertentu() {
-        for t in [FeatureType::HidranUmum, FeatureType::MeterInduk, FeatureType::Sr, FeatureType::Bronkaptering] {
+        for t in [
+            FeatureType::HidranUmum,
+            FeatureType::MeterInduk,
+            FeatureType::Sr,
+            FeatureType::Bronkaptering,
+            FeatureType::Tapping,
+        ] {
             assert!(periksa_atribut(t, &AtributAset::default()).is_err(), "{t:?}");
             let ada = AtributAset { nama: Some("Hidran 1".into()), ..Default::default() };
             assert!(periksa_atribut(t, &ada).is_ok(), "{t:?}");

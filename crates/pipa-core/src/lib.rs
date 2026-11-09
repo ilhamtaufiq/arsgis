@@ -58,10 +58,12 @@ pub enum FeatureType {
     Intake,
     Pompa,
     MeterInduk,
+    /// Titik sambungan pengambilan air dari pipa (tapping). Bukan data pelanggan; pelanggan tetap lewat SR.
+    Tapping,
 }
 
 impl FeatureType {
-    pub const ALL: [FeatureType; 11] = [
+    pub const ALL: [FeatureType; 12] = [
         FeatureType::Pipa,
         FeatureType::Valve,
         FeatureType::Reservoir,
@@ -73,6 +75,7 @@ impl FeatureType {
         FeatureType::Intake,
         FeatureType::Pompa,
         FeatureType::MeterInduk,
+        FeatureType::Tapping,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -88,6 +91,7 @@ impl FeatureType {
             FeatureType::Intake => "intake",
             FeatureType::Pompa => "pompa",
             FeatureType::MeterInduk => "meter_induk",
+            FeatureType::Tapping => "tapping",
         }
     }
 
@@ -351,6 +355,7 @@ mod tests {
             FeatureType::Intake,
             FeatureType::Pompa,
             FeatureType::MeterInduk,
+            FeatureType::Tapping,
         ] {
             assert_eq!(FeatureType::parse(t.as_str()).unwrap(), t);
             // Serde harus memakai nama teks yang sama dengan database dan API.
@@ -360,7 +365,19 @@ mod tests {
         assert_eq!(FeatureType::parse("bak_penahan_tekanan").unwrap(), FeatureType::BakPenahanTekanan);
         assert!(FeatureType::parse("BPT").is_err());
         assert!(FeatureType::parse("sumur").is_err());
-        assert_eq!(FeatureType::ALL.len(), 11);
+        assert_eq!(FeatureType::ALL.len(), 12);
+    }
+
+    #[test]
+    fn tapping_is_its_own_type_not_customer_data() {
+        assert_eq!(FeatureType::parse("tapping").unwrap(), FeatureType::Tapping);
+        assert_eq!(FeatureType::Tapping.as_str(), "tapping");
+        assert!(!FeatureType::Tapping.is_customer_data());
+        assert_ne!(FeatureType::Tapping, FeatureType::Sr);
+        // Pengunjung tanpa login boleh membaca tapping, sama seperti jenis jaringan lain.
+        assert!(can_read_types(None, &[FeatureType::Tapping]));
+        assert!(Role::Viewer.can_read(FeatureType::Tapping));
+        assert!(!Role::Viewer.can_read(FeatureType::Sr));
     }
 
     #[test]
