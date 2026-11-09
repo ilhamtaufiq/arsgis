@@ -21,7 +21,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use pipa_core::{can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Role};
+use pipa_core::{
+    can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Izin, Role,
+};
 use pipa_store::{
     fitur_geojson, AsetBaru, AsetUbah, CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput, Store,
     StoreError, StagingRow, TulisHasil,
@@ -254,7 +256,7 @@ impl FromRequestParts<AppState> for Editor {
         let user = session_cookie(parts)
             .and_then(|t| verify_token(t, &state.jwt_secret))
             .ok_or_else(ApiError::unauthorized)?;
-        if user.role < Role::Editor {
+        if !user.role.punya(Izin::KelolaData) {
             return Err(ApiError(StatusCode::FORBIDDEN, "aksi ini butuh peran editor atau admin".into()));
         }
         Ok(Editor(user))
@@ -384,7 +386,7 @@ async fn dashboard(
     MaybeUser(user): MaybeUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
-    let customer = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let customer = user.as_ref().is_some_and(|u| u.role.punya(Izin::BacaDataPelanggan));
     let networks = state.store.list_networks().await?;
     let nama = networks
         .iter()
@@ -580,9 +582,9 @@ async fn desa_detail(
     MaybeUser(user): MaybeUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
-    let customer = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let lihat_pengurus = user.as_ref().is_some_and(|u| u.role.punya(Izin::BacaNamaPokmas));
     let mut detail = state.store.desa_detail(id).await?.ok_or_else(desa_tidak_ditemukan)?;
-    if !customer {
+    if !lihat_pengurus {
         sembunyikan_pengurus(&mut detail.pokmas);
     }
     Ok(Json(json!({ "data": detail })))
@@ -606,7 +608,7 @@ async fn desa_pokmas(
     MaybeUser(user): MaybeUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
-    let editor = user.as_ref().is_some_and(|u| u.role >= Role::Editor);
+    let editor = user.as_ref().is_some_and(|u| u.role.punya(Izin::BacaNamaPokmas));
     let detail = state.store.pokmas_detail(id).await?.ok_or_else(desa_tidak_ditemukan)?;
     let mut pokmas = detail.efektif.pokmas;
     let koreksi = if editor {

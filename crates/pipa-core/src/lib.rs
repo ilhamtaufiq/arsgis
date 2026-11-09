@@ -10,6 +10,15 @@ pub use aset::{
     AtributPatch, Atribut, JenisGeometri, TAHUN_MAKS, TAHUN_MIN,
 };
 
+mod cakupan;
+pub use cakupan::{cakupan_json, hitung_cakupan, validasi_dusun, Cakupan, DusunIsian, DusunMasukan};
+
+mod kode;
+pub use kode::{format_kode_aset, kode_desa};
+
+mod pelanggan;
+pub use pelanggan::{validasi_pelanggan, GolonganTarif, PelangganIsian, PelangganMasukan, StatusPelanggan};
+
 #[derive(Debug, Error, PartialEq)]
 pub enum CoreError {
     #[error("jenis fitur tidak dikenal: {0}")]
@@ -163,41 +172,82 @@ impl Kondisi {
     }
 }
 
-/// Peran pengguna. Urutan dari yang paling terbatas ke yang paling luas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+/// Peran pengguna. Nilai teks sama dengan CHECK `users.role` (migrasi 0013) dan klaim `role` di token.
+///
+/// Pengunjung tanpa login (publik) tidak punya peran: `Option<Role>` = `None`.
+/// Urutan variant tidak dipakai untuk memeriksa izin. Setiap izin ditulis eksplisit di `Role::punya`,
+/// karena peran seperti bendahara tidak lebih tinggi dari editor, hanya berbeda aksesnya.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Role {
+    /// Pengguna login umum, hanya membaca data yang tidak pribadi (sama dengan `viewer` lama).
     Viewer,
+    /// Kepala desa: hanya membaca, dan hanya ringkasan cakupan. Tidak melihat data pelanggan perorangan.
+    KepalaDesa,
+    /// Bendahara: membaca data pelanggan (nama, nomor meter, status). Tidak mengubah aset atau pelanggan.
+    Bendahara,
+    /// Operator atau teknisi (nilai teks tetap `editor`): mengelola aset, impor, Pokmas, dan pelanggan.
     Editor,
     Admin,
 }
 
+/// Izin per tindakan. Setiap endpoint memeriksa salah satu izin ini, bukan peran secara langsung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Izin {
+    /// Membaca data pelanggan (titik SR, daftar dan detail pelanggan, riwayat pelanggan).
+    BacaDataPelanggan,
+    /// Mengubah data pelanggan dan menghubungkan SR ke dusun.
+    KelolaPelanggan,
+    /// Mengubah aset, impor, koreksi Pokmas, dan jumlah rumah per dusun.
+    KelolaData,
+    /// Membaca nama pengurus Pokmas dan riwayat koreksinya.
+    BacaNamaPokmas,
+    /// Membaca ringkasan cakupan per dusun dan desa (tanpa data pelanggan perorangan).
+    BacaCakupan,
+    /// Mengelola pengguna dan katalog layer.
+    KelolaPengguna,
+}
+
 impl Role {
+    pub const ALL: [Role; 5] = [Role::Viewer, Role::KepalaDesa, Role::Bendahara, Role::Editor, Role::Admin];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Role::Viewer => "viewer",
+            Role::KepalaDesa => "kepala_desa",
+            Role::Bendahara => "bendahara",
             Role::Editor => "editor",
             Role::Admin => "admin",
         }
     }
 
     pub fn parse(s: &str) -> Result<Self, CoreError> {
-        match s {
-            "viewer" => Ok(Role::Viewer),
-            "editor" => Ok(Role::Editor),
-            "admin" => Ok(Role::Admin),
-            other => Err(CoreError::UnknownRole(other.to_string())),
+        Self::ALL
+            .into_iter()
+            .find(|r| r.as_str() == s)
+            .ok_or_else(|| CoreError::UnknownRole(s.to_string()))
+    }
+
+    /// Matriks izin. Satu-satunya tempat yang menentukan siapa boleh apa.
+    pub fn punya(self, izin: Izin) -> bool {
+        use Izin::*;
+        match (self, izin) {
+            (Role::Admin, _) => true,
+            (Role::Editor, KelolaPelanggan | KelolaData | BacaDataPelanggan | BacaNamaPokmas | BacaCakupan) => true,
+            (Role::Bendahara, BacaDataPelanggan | BacaCakupan) => true,
+            (Role::KepalaDesa | Role::Viewer, BacaCakupan) => true,
+            _ => false,
         }
     }
 
-    /// Menulis aset (tambah, ubah, hapus) hanya untuk editor dan admin.
+    /// Menulis aset (tambah, ubah, hapus) hanya untuk operator dan admin.
     pub fn can_write(self) -> bool {
-        self >= Role::Editor
+        self.punya(Izin::KelolaData)
     }
 
-    /// Data pelanggan (sr) hanya untuk editor dan admin.
+    /// Data pelanggan (sr) dibaca oleh peran yang punya `BacaDataPelanggan`.
     pub fn can_read(self, t: FeatureType) -> bool {
-        !t.is_customer_data() || self >= Role::Editor
+        !t.is_customer_data() || self.punya(Izin::BacaDataPelanggan)
     }
 }
 
@@ -211,10 +261,11 @@ pub fn can_read_types(role: Option<Role>, types: &[FeatureType]) -> bool {
 
 /// Nilai `min_role` di katalog layer yang boleh dilihat peran ini. `None` berarti pengunjung tanpa login.
 /// Layer dengan `min_role` di luar daftar ini tidak boleh dikirim ke pemanggil.
+/// Bendahara dan kepala desa hanya melihat layer publik dan viewer, karena layer internal memuat data operasional.
 pub fn catalog_roles(role: Option<Role>) -> &'static [&'static str] {
     match role {
         None => &["anon"],
-        Some(Role::Viewer) => &["anon", "viewer"],
+        Some(Role::Viewer | Role::KepalaDesa | Role::Bendahara) => &["anon", "viewer"],
         Some(Role::Editor) => &["anon", "viewer", "editor"],
         Some(Role::Admin) => &["anon", "viewer", "editor", "admin"],
     }
@@ -377,8 +428,64 @@ mod tests {
     #[test]
     fn role_can_write_only_editor_and_admin() {
         assert!(!Role::Viewer.can_write());
+        assert!(!Role::KepalaDesa.can_write());
+        assert!(!Role::Bendahara.can_write());
         assert!(Role::Editor.can_write());
         assert!(Role::Admin.can_write());
+    }
+
+    #[test]
+    fn matriks_izin_per_peran() {
+        use Izin::*;
+        // Admin punya semua izin.
+        for izin in [BacaDataPelanggan, KelolaPelanggan, KelolaData, BacaNamaPokmas, BacaCakupan, KelolaPengguna] {
+            assert!(Role::Admin.punya(izin), "{izin:?}");
+        }
+        // Operator mengelola data, tetapi tidak mengatur pengguna.
+        for izin in [BacaDataPelanggan, KelolaPelanggan, KelolaData, BacaNamaPokmas, BacaCakupan] {
+            assert!(Role::Editor.punya(izin), "{izin:?}");
+        }
+        assert!(!Role::Editor.punya(KelolaPengguna));
+        // Bendahara membaca pelanggan dan cakupan, tidak mengubah apa pun.
+        assert!(Role::Bendahara.punya(BacaDataPelanggan));
+        assert!(Role::Bendahara.punya(BacaCakupan));
+        assert!(!Role::Bendahara.punya(KelolaPelanggan));
+        assert!(!Role::Bendahara.punya(KelolaData));
+        assert!(!Role::Bendahara.punya(BacaNamaPokmas));
+        // Kepala desa dan viewer hanya ringkasan cakupan.
+        for r in [Role::KepalaDesa, Role::Viewer] {
+            assert!(r.punya(BacaCakupan), "{r:?}");
+            assert!(!r.punya(BacaDataPelanggan), "{r:?}");
+            assert!(!r.punya(KelolaData), "{r:?}");
+            assert!(!r.punya(BacaNamaPokmas), "{r:?}");
+        }
+    }
+
+    #[test]
+    fn peran_baru_tidak_membaca_data_pelanggan_selain_bendahara_dan_internal() {
+        assert!(Role::Bendahara.can_read(FeatureType::Sr));
+        assert!(!Role::KepalaDesa.can_read(FeatureType::Sr));
+        assert!(!can_read_types(Some(Role::KepalaDesa), &[FeatureType::Sr]));
+        assert!(can_read_types(Some(Role::KepalaDesa), &[FeatureType::Pipa]));
+        assert!(Role::KepalaDesa.can_read(FeatureType::Pipa));
+    }
+
+    #[test]
+    fn peran_teks_roundtrip_termasuk_peran_baru() {
+        for r in Role::ALL {
+            assert_eq!(Role::parse(r.as_str()).unwrap(), r);
+            let json = serde_json::to_string(&r).unwrap();
+            assert_eq!(json, format!("\"{}\"", r.as_str()));
+        }
+        assert_eq!(Role::parse("kepala_desa").unwrap(), Role::KepalaDesa);
+        assert_eq!(Role::parse("editor").unwrap(), Role::Editor);
+        assert!(Role::parse("Kepala Desa").is_err());
+    }
+
+    #[test]
+    fn katalog_peran_baru_tidak_melihat_layer_internal() {
+        assert_eq!(catalog_roles(Some(Role::Bendahara)), ["anon", "viewer"]);
+        assert_eq!(catalog_roles(Some(Role::KepalaDesa)), ["anon", "viewer"]);
     }
 
     #[test]
