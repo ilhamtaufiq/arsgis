@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Geometry } from 'geojson'
 import type { Bbox, FeatureType, PipeFeature, PipeFunction } from './types'
 import type { DesaProps } from './cakupanApi'
 import { ASET_LABEL } from './asetStyle'
@@ -20,6 +21,22 @@ export const PIPE_LABELS: Record<PipeFunction, string> = {
 export const DEFAULT_LAYERS: FeatureType[] = ['valve', 'reservoir', 'bronkaptering', 'sr']
 export const DEFAULT_PIPE_FUNCTIONS: PipeFunction[] = ['transmisi', 'distribusi']
 
+/**
+ * Mode edit di peta. Hanya dipakai editor dan admin.
+ * - tambah: menunggu klik di peta. Titik langsung membuka form; pipa mengumpulkan `titik` (lng, lat) dulu.
+ * - pindah: aset asli disembunyikan dan digantikan objek yang bisa diseret.
+ */
+export type ModeEdit =
+  | { kind: 'tambah'; jenis: FeatureType; titik: [number, number][] }
+  | { kind: 'pindah'; feature: PipeFeature }
+  | null
+
+/** Form atribut yang terbuka: fitur baru dengan geometri yang sudah ditentukan, atau fitur yang diubah. */
+export type FormulirAset =
+  | { kind: 'buat'; jenis: FeatureType; geometry: Geometry }
+  | { kind: 'ubah'; feature: PipeFeature }
+  | null
+
 type MapState = {
   networkId: number | null
   bbox: Bbox | null
@@ -29,13 +46,15 @@ type MapState = {
   cakupanOpen: boolean
   /** Fitur yang peta harus pusatkan. Berbeda dari `selected`, karena klik di peta tidak memindahkan kamera. */
   focus: PipeFeature | null
-  /** Panel kiri yang terbuka: daftar layer, alat gambar, atau tidak ada. */
-  panel: 'layer' | 'alat' | null
+  /** Panel kiri yang terbuka: daftar layer, alat gambar, edit aset, atau tidak ada. */
+  panel: 'layer' | 'alat' | 'edit' | null
   /** Alat gambar yang sedang menunggu klik di peta. */
   drawMode: 'rectangle' | null
   /** Jumlah bentuk yang sudah digambar pengguna. */
   drawnCount: number
-  setPanel: (panel: 'layer' | 'alat' | null) => void
+  editor: ModeEdit
+  formulir: FormulirAset
+  setPanel: (panel: 'layer' | 'alat' | 'edit' | null) => void
   setDrawMode: (mode: 'rectangle' | null) => void
   setDrawnCount: (n: number) => void
   /** Unit SPAM yang dipilih untuk filter. Null berarti semua unit. */
@@ -45,6 +64,8 @@ type MapState = {
   setFocus: (feature: PipeFeature | null) => void
   selectDesa: (desa: DesaProps | null) => void
   toggleCakupan: () => void
+  setEditor: (editor: ModeEdit) => void
+  setFormulir: (formulir: FormulirAset) => void
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -57,13 +78,17 @@ export const useMapStore = create<MapState>((set) => ({
   panel: null,
   drawMode: null,
   drawnCount: 0,
+  editor: null,
+  formulir: null,
   setPanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel, drawMode: null })),
   setDrawMode: (mode) => set({ drawMode: mode }),
   setDrawnCount: (n) => set({ drawnCount: n }),
-  setNetwork: (id) => set({ networkId: id, selected: null, focus: null }),
+  setNetwork: (id) => set({ networkId: id, selected: null, focus: null, editor: null, formulir: null }),
   setBbox: (bbox) => set({ bbox }),
   select: (feature) => set({ selected: feature, desaSelected: null }),
   setFocus: (feature) => set({ focus: feature }),
   selectDesa: (desa) => set({ desaSelected: desa, selected: null }),
   toggleCakupan: () => set((s) => ({ cakupanOpen: !s.cakupanOpen })),
+  setEditor: (editor) => set({ editor }),
+  setFormulir: (formulir) => set({ formulir }),
 }))
