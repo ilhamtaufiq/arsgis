@@ -76,9 +76,13 @@ Nama file dan bbox dapat diubah. Jika mengganti nama file, ubah juga `BASEMAP_UR
 | GET | `/api/v1/features/geojson?bbox=w,s,e,n&types=pipa` | Fitur dari semua unit SPAM dalam bbox (peta menampilkan semua; pilihan unit menyaring di klien) |
 | POST | `/api/v1/auth/login` | Login (username, password), set cookie sesi `HttpOnly` |
 | POST | `/api/v1/auth/logout` | Hapus cookie sesi |
-| POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr` | Unggah KML atau KMZ ke staging untuk satu unit SPAM (`network_id` wajib). KMZ dikenali dari isinya dan dibuka (`doc.kml`, maksimal 50 MB setelah dibuka). Fitur diperiksa terhadap batas desa unit. (editor, admin) |
+| POST | `/api/v1/imports?network_id=N&nama_file=...&titik=sr&pekerjaan_id=P` | Unggah KML atau KMZ ke staging untuk satu unit SPAM (`network_id` wajib, `pekerjaan_id` opsional). KMZ dikenali dari isinya dan dibuka (`doc.kml`, maksimal 50 MB setelah dibuka). Fitur diperiksa terhadap batas desa unit. Respons memuat `duplikat` (batch committed dengan sha256 berkas yang sama, atau null). (editor, admin) |
 | GET | `/api/v1/imports/:id` | Laporan dan status batch impor (editor, admin) |
-| POST | `/api/v1/imports/:id/commit?network_id=N` | Simpan fitur yang di dalam batas desa; fitur di luar dilewati. Sekali saja per batch (editor, admin) |
+| POST | `/api/v1/imports/:id/commit?network_id=N&izinkan_ganda=true` | Simpan fitur yang di dalam batas desa; fitur di luar dilewati. Sekali saja per batch. Berkas yang sama dengan batch committed lain ditolak 409 kecuali `izinkan_ganda=true`. (editor, admin) |
+| POST | `/api/v1/imports/:id/batal` | Batalkan impor utuh: fitur batch committed di-soft-delete (riwayat `batal_impor`), staging batch staged dihapus. Batch yang sudah dibatalkan menjawab 409. (editor, admin) |
+| GET | `/api/v1/pekerjaan` | Daftar pekerjaan (nama paket) yang aktif untuk dropdown impor (pengguna yang sudah masuk) |
+| POST | `/api/v1/features/:id/pulihkan` | Pulihkan aset yang dihapus. Batas desa dan atribut wajib diperiksa ulang; aset yang tidak lagi valid ditolak 422 (editor, admin) |
+| GET | `/api/v1/features/terhapus?limit=50&page=1` | Aset yang sedang terhapus, terbaru dihapus di atas (editor, admin) |
 | GET | `/api/v1/auth/me` | Pengguna saat ini (401 jika belum login) |
 | GET | `/basemap/*` | Berkas PMTiles, dengan range request |
 | GET | `/api/v1/desa` | Desa dengan capaian dan cakupan SPM (publik, tanpa nama pengurus Pokmas) |
@@ -99,6 +103,8 @@ Fitur `sr` berisi data pelanggan. Endpoint GeoJSON mengembalikan 403 jika peran 
 
 Data desa, capaian, unit SPAM, dan Pokmas berasal dari Arumanis dan disimpan sebagai tabel referensi `ref_*`.
 arsgis hanya membaca. Lihat `docs/rencana-spm-air-minum.md`.
+
+- Daftar pekerjaan (nama paket): `GET /api/public/v1/pekerjaan` Arumanis, butuh `ARUMANIS_API_KEY` dengan scope `pekerjaan:read`. Tanpa scope itu sinkron tetap berjalan, dan daftar pekerjaan dilaporkan di catatan sinkron. Scope ditambahkan di server apiamis: `apiamis-api create-api-key --name=arsgis --scopes=spam-units:read,peripaan:read,pekerjaan:read`.
 
 - Desa dan capaian per desa: `GET /api/public/spam-units/map-stats` Arumanis (publik).
 - Unit SPAM, pengelola, dan capaian per unit: `GET /api/public/v1/spam-units` Arumanis dengan kunci API `ARUMANIS_API_KEY` (disarankan, tidak kedaluwarsa), atau `GET /api/spam-units` dengan `ARUMANIS_TOKEN` (cadangan, kedaluwarsa dalam 12 jam secara bawaan). Kunci dibuat di server apiamis: `apiamis-api create-api-key --name=arsgis --scopes=spam-units:read,peripaan:read`.

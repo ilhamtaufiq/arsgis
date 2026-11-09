@@ -16,7 +16,9 @@ use crate::{Store, StoreError};
 /// Kolom fitur dalam urutan yang dibaca `fitur_dari_baris`. Geometri diambil sebagai GeoJSON.
 pub(crate) const FITUR_COLS: &str = "id, network_id, feature_type, nama, diameter_mm, material, tahun_pasang, kondisi, \
     status, fungsi, kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
-    elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, kode_aset, ST_AsGeoJSON(geom)::text AS geometry";
+    elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, kode_aset, pekerjaan_id, \
+    (SELECT nama_paket FROM ref_pekerjaan rp WHERE rp.id = features.pekerjaan_id) AS pekerjaan_nama, \
+    ST_AsGeoJSON(geom)::text AS geometry";
 
 /// Satu fitur lengkap dengan atributnya, seperti yang tersimpan di database.
 #[derive(Debug, Clone)]
@@ -26,6 +28,8 @@ pub struct FiturLengkap {
     pub feature_type: String,
     /// Kode aset unik, tidak pernah berubah setelah dibuat.
     pub kode_aset: String,
+    pub pekerjaan_id: Option<i64>,
+    pub pekerjaan_nama: Option<String>,
     pub geometry: Value,
     pub fungsi: Option<String>,
     pub atribut: AtributAset,
@@ -89,6 +93,8 @@ pub fn fitur_geojson(f: &FiturLengkap) -> Value {
             "tahun_bangun": a.tahun_bangun,
             "sumber_dana": a.sumber_dana,
             "kode_aset": f.kode_aset,
+            "pekerjaan_id": f.pekerjaan_id,
+            "pekerjaan_nama": f.pekerjaan_nama,
         },
     })
 }
@@ -101,6 +107,8 @@ pub(crate) fn fitur_dari_baris(r: &PgRow) -> Result<FiturLengkap, StoreError> {
         network_id: r.try_get("network_id")?,
         feature_type: r.try_get("feature_type")?,
         kode_aset: r.try_get("kode_aset")?,
+        pekerjaan_id: r.try_get("pekerjaan_id")?,
+        pekerjaan_nama: r.try_get("pekerjaan_nama")?,
         geometry,
         fungsi: r.try_get("fungsi")?,
         atribut: AtributAset {

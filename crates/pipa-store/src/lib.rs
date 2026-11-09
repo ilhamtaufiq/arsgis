@@ -10,6 +10,9 @@ mod aset;
 mod catalog_input;
 mod impor_kelola;
 pub use impor_kelola::BatalHasil;
+
+mod pekerjaan;
+pub use pekerjaan::{PekerjaanRefInput, PekerjaanRow};
 use pipa_core::impor::KandidatDuplikat;
 pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, PulihHasil, RiwayatAset, TerhapusRow, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
@@ -156,6 +159,9 @@ pub struct FeatureRow {
     pub sumber_dana: Option<String>,
     /// Kode aset unik, dibuat trigger database (migrasi 0014).
     pub kode_aset: String,
+    /// Pekerjaan (nama paket) asal aset, NULL bila tidak ada.
+    pub pekerjaan_id: Option<i64>,
+    pub pekerjaan_nama: Option<String>,
     /// Dusun titik SR. Selalu None untuk jenis selain sr.
     pub dusun_id: Option<i64>,
     /// Hanya terisi untuk jenis sr: true bila SR punya pelanggan aktif. None untuk jenis lain.
@@ -318,7 +324,8 @@ impl Store {
                     kondisi, status, fungsi, \
                     kapasitas_m3::float8 AS kapasitas_m3, debit_lps::float8 AS debit_lps, \
                     elevasi_m::float8 AS elevasi_m, tahun_bangun, sumber_dana, \
-                    kode_aset, dusun_id, \
+                    kode_aset, dusun_id, pekerjaan_id, \
+                    (SELECT nama_paket FROM ref_pekerjaan rp WHERE rp.id = features.pekerjaan_id) AS pekerjaan_nama, \
                     CASE WHEN feature_type = 'sr' THEN EXISTS ( \
                         SELECT 1 FROM pelanggan p WHERE p.sr_feature_id = features.id AND p.status = 'aktif' \
                     ) END AS terlayani, \
@@ -392,6 +399,8 @@ fn feature_from_row(r: &PgRow) -> Result<FeatureRow, StoreError> {
         tahun_bangun: r.try_get("tahun_bangun")?,
         sumber_dana: r.try_get("sumber_dana")?,
         kode_aset: r.try_get("kode_aset")?,
+        pekerjaan_id: r.try_get("pekerjaan_id")?,
+        pekerjaan_nama: r.try_get("pekerjaan_nama")?,
         dusun_id: r.try_get("dusun_id")?,
         terlayani: r.try_get("terlayani")?,
         geometry,
@@ -481,18 +490,20 @@ impl Store {
         dibuat_oleh: &str,
         network_id: i64,
         file_sha256: &str,
+        pekerjaan_id: Option<i64>,
         rows: &[StagingRow],
     ) -> Result<i64, StoreError> {
         let mut tx = self.pool.begin().await?;
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh, network_id, file_sha256) \
-             VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            "INSERT INTO import_batches (nama_file, laporan, dibuat_oleh, network_id, file_sha256, pekerjaan_id) \
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
         )
         .bind(nama_file)
         .bind(laporan)
         .bind(dibuat_oleh)
         .bind(network_id)
         .bind(file_sha256)
+        .bind(pekerjaan_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -593,8 +604,9 @@ impl Store {
         }
 
         let result = sqlx::query(
-            "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, import_batch_id) \
-             SELECT $2, feature_type, geom, nama, diameter_mm, batch_id \
+            "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, import_batch_id, pekerjaan_id) \
+             SELECT $2, feature_type, geom, nama, diameter_mm, batch_id, \
+                    (SELECT pekerjaan_id FROM import_batches WHERE id = $1) \
              FROM import_staging WHERE batch_id = $1 AND dalam_batas IS TRUE",
         )
         .bind(id)

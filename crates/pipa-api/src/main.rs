@@ -235,6 +235,8 @@ async fn features_geojson(
                     "tahun_bangun": f.tahun_bangun,
                     "sumber_dana": f.sumber_dana,
                     "kode_aset": f.kode_aset,
+                    "pekerjaan_id": f.pekerjaan_id,
+                    "pekerjaan_nama": f.pekerjaan_nama,
                     "dusun_id": f.dusun_id,
                     "terlayani": f.terlayani,
                 },
@@ -277,6 +279,8 @@ struct UploadParams {
     nama_file: Option<String>,
     /// Jenis untuk Point yang namanya tidak menyebut jenis, misalnya `sr`.
     titik: Option<String>,
+    /// Pekerjaan (nama paket) untuk seluruh aset batch ini. Opsional.
+    pekerjaan_id: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -305,6 +309,11 @@ async fn upload_import(
         return Err(bad_request("jaringan ini bukan unit SPAM dengan desa, impor tidak bisa dilakukan"));
     }
     let titik = params.titik.as_deref().map(FeatureType::parse).transpose()?;
+    if let Some(p) = params.pekerjaan_id {
+        if !state.store.pekerjaan_aktif(p).await? {
+            return Err(bad_request("pekerjaan tidak ditemukan atau tidak aktif"));
+        }
+    }
     let preview = pipa_import::parse_kml(xml, titik).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e.to_string()))?;
 
     let mut per_jenis: BTreeMap<&str, usize> = BTreeMap::new();
@@ -343,7 +352,7 @@ async fn upload_import(
     let duplikat = pipa_core::impor::cari_duplikat(&hash, None, &kandidat).map(duplikat_json);
     let id = state
         .store
-        .create_batch(&nama_file, &laporan, &user.username, network_id, &hash, &rows)
+        .create_batch(&nama_file, &laporan, &user.username, network_id, &hash, params.pekerjaan_id, &rows)
         .await?;
     let batch = state
         .store
@@ -360,6 +369,7 @@ async fn upload_import(
             "network_id": network_id,
             "laporan": batch.laporan,
             "duplikat": duplikat,
+            "pekerjaan_id": params.pekerjaan_id,
         })),
     )
         .into_response())
@@ -384,6 +394,12 @@ async fn get_import(State(state): State<AppState>, _: Editor, Path(id): Path<i64
 /// Bentuk JSON `duplikat` pada respons upload dan commit.
 fn duplikat_json(k: &pipa_core::impor::KandidatDuplikat) -> Value {
     json!({ "batch_id": k.batch_id, "nama_file": k.nama_file, "created_at": k.created_at })
+}
+
+/// Pekerjaan aktif untuk dropdown impor. Dapat dibaca semua pengguna yang sudah masuk.
+async fn list_pekerjaan(State(state): State<AppState>, _: om_routes::Viewer) -> Result<Json<Value>, ApiError> {
+    let daftar = state.store.list_pekerjaan().await?;
+    Ok(Json(json!({ "data": daftar })))
 }
 
 async fn commit_import(
@@ -912,6 +928,7 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         .route("/api/v1/imports/{id}/batal", post(batal_import))
+        .route("/api/v1/pekerjaan", get(list_pekerjaan))
         .merge(pelanggan_routes::router())
         // Operasi dan pemeliharaan (Tahap C): gangguan, perbaikan, jadwal perawatan, dan rehabilitasi.
         .merge(om_routes::routes())

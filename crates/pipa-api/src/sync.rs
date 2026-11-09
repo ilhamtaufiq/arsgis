@@ -3,7 +3,7 @@
 
 use std::{env, sync::Arc, time::Duration};
 
-use pipa_store::{ApplyResult, DesaRefInput, PokmasRefInput, Store, UnitRefInput};
+use pipa_store::{ApplyResult, DesaRefInput, PekerjaanRefInput, PokmasRefInput, Store, UnitRefInput};
 use pipa_sync::{derive_pokmas, ArumanisClient};
 use serde::Serialize;
 use tokio::sync::Mutex;
@@ -142,6 +142,33 @@ impl Syncer {
             }
         };
 
+        // Daftar pekerjaan terpisah: gagal di sini hanya dicatat, sinkron desa dan unit tetap berjalan.
+        let pekerjaan: Option<Vec<PekerjaanRefInput>> = if !client.has_api_key() {
+            catatan.push("ARUMANIS_API_KEY belum diatur: daftar pekerjaan tidak disinkron".into());
+            None
+        } else {
+            match client.pekerjaan().await {
+                Ok(list) if list.is_empty() => {
+                    catatan.push("Arumanis mengembalikan 0 pekerjaan; daftar pekerjaan tidak diperbarui".into());
+                    None
+                }
+                Ok(list) => Some(
+                    list.into_iter()
+                        .map(|p| PekerjaanRefInput {
+                            id: p.id,
+                            nama_paket: p.nama_paket,
+                            tahun: p.tahun.and_then(|t| i16::try_from(t).ok()),
+                            desa_id: p.desa_id,
+                        })
+                        .collect(),
+                ),
+                Err(e) => {
+                    catatan.push(format!("daftar pekerjaan tidak diperbarui: {e}"));
+                    None
+                }
+            }
+        };
+
         let mapped = units.map(|units| {
             let pokmas: Vec<PokmasRefInput> = derive_pokmas(&units)
                 .into_iter()
@@ -182,6 +209,11 @@ impl Syncer {
             .apply_sync(&desa, mapped.as_ref().map(|(u, p)| (u.as_slice(), p.as_slice())))
             .await
             .map_err(|e| e.to_string())?;
+        if let Some(pekerjaan) = pekerjaan {
+            if let Err(e) = self.store.apply_pekerjaan(&pekerjaan).await {
+                catatan.push(format!("daftar pekerjaan gagal disimpan: {e}"));
+            }
+        }
         if hasil.unit_dilewati > 0 {
             catatan.push(format!("{} unit dilewati karena desanya tidak ada di daftar desa", hasil.unit_dilewati));
         }

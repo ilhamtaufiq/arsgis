@@ -221,6 +221,28 @@ pub fn parse_batas_desa(json: &str) -> Result<Vec<BatasDesa>, SyncError> {
     Ok(out)
 }
 
+/// Angka opsional dari Arumanis: null, angka, atau string angka. Teks lain dianggap kosong.
+fn lenient_opt_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)),
+        Value::String(s) => s.trim().parse::<f64>().ok().map(|f| f as i64),
+        _ => None,
+    })
+}
+
+/// Baris `GET /api/public/v1/pekerjaan` (scope `pekerjaan:read`): ringkas, tanpa pagu dan catatan.
+/// `tahun` belum ada di respons publik. Dibaca bila suatu saat ditambahkan, jika tidak ada dibiarkan kosong.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Pekerjaan {
+    #[serde(deserialize_with = "lenient_i64")]
+    pub id: i64,
+    pub nama_paket: Option<String>,
+    #[serde(default, deserialize_with = "lenient_opt_i64")]
+    pub desa_id: Option<i64>,
+    #[serde(default, deserialize_with = "lenient_opt_i64")]
+    pub tahun: Option<i64>,
+}
+
 /// Klien baca Arumanis. Dua cara masuk untuk endpoint yang butuh login:
 /// - `api_key` (disarankan untuk layanan): header `X-API-Key`, jalur `/public/v1/*`, tidak kedaluwarsa.
 /// - `token` (Sanctum, umur terbatas): header Bearer, jalur internal. Dipakai bila tidak ada kunci API.
@@ -285,6 +307,11 @@ impl ArumanisClient {
         self.token.is_some()
     }
 
+    /// Kunci API terpasang. Daftar pekerjaan hanya tersedia lewat jalur kunci API.
+    pub fn has_api_key(&self) -> bool {
+        self.api_key.is_some()
+    }
+
     /// Ada kunci API atau token, jadi endpoint yang butuh login (unit SPAM, Pokmas) bisa dipanggil.
     pub fn has_credentials(&self) -> bool {
         self.api_key.is_some() || self.token.is_some()
@@ -309,6 +336,26 @@ impl ArumanisClient {
     /// Ringkasan capaian per desa. Endpoint publik, tidak butuh token.
     pub async fn desa_stats(&self) -> Result<Vec<DesaStat>, SyncError> {
         Ok(self.get::<Vec<DesaStat>>("/public/spam-units/map-stats").await?.data)
+    }
+
+    /// Semua pekerjaan (nama paket) dari `/public/v1/pekerjaan`. Butuh kunci API dengan scope `pekerjaan:read`.
+    /// Kunci tanpa scope itu menjawab 403, yang dilaporkan pemanggil sebagai `SyncError::Status`.
+    pub async fn pekerjaan(&self) -> Result<Vec<Pekerjaan>, SyncError> {
+        if !self.has_api_key() {
+            return Err(SyncError::Format("daftar pekerjaan butuh ARUMANIS_API_KEY dengan scope pekerjaan:read".into()));
+        }
+        let mut out = Vec::new();
+        let mut page = 1;
+        loop {
+            let env = self.get::<Vec<Pekerjaan>>(&format!("/public/v1/pekerjaan?per_page=200&page={page}")).await?;
+            let last = env.meta.map(|m| m.last_page).unwrap_or(1).max(1);
+            out.extend(env.data);
+            if page >= last {
+                break;
+            }
+            page += 1;
+        }
+        Ok(out)
     }
 
     /// Semua unit SPAM beserta pengelola dan capaian. Butuh token.
@@ -442,6 +489,20 @@ mod tests {
         // Isian kosong (spasi saja) tidak dihitung sebagai kredensial.
         let blank = ArumanisClient::with_credentials("https://x.id/api", Some("  ".into()), Some("  ".into())).unwrap();
         assert!(!blank.has_credentials());
+    }
+
+    #[test]
+    fn pekerjaan_parses_null_dan_string_desa() {
+        let daftar: Vec<Pekerjaan> = serde_json::from_str(
+            r#"[{"id":12,"nama_paket":"SR Cibiuk","kode_rekening":"x","kecamatan_id":3,"desa_id":"206","status":"aktif"},
+                {"id":"13","nama_paket":null,"desa_id":null,"status":null}]"#,
+        )
+        .unwrap();
+        assert_eq!(daftar[0].desa_id, Some(206));
+        assert_eq!(daftar[0].tahun, None);
+        assert_eq!(daftar[1].id, 13);
+        assert_eq!(daftar[1].desa_id, None);
+        assert_eq!(daftar[1].nama_paket, None);
     }
 
     #[test]
