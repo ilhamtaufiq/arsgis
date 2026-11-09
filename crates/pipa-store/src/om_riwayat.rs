@@ -73,6 +73,15 @@ impl Store {
         Ok(id)
     }
 
+    /// Jenis aset (teks dari `features.feature_type`). None bila aset tidak ada atau sudah dihapus.
+    pub async fn tipe_aset(&self, feature_id: i64) -> Result<Option<String>, StoreError> {
+        let tipe = sqlx::query_scalar("SELECT feature_type FROM features WHERE id = $1 AND deleted_at IS NULL")
+            .bind(feature_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(tipe)
+    }
+
     /// Panel O&M satu aset: perbaikan, jadwal, rehabilitasi, laporan gangguan terbaru, dan log.
     /// None bila aset tidak ada atau sudah dihapus.
     pub async fn om_aset(&self, feature_id: i64) -> Result<Option<OmAset>, StoreError> {

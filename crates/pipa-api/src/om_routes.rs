@@ -18,6 +18,7 @@ use axum::{
 use pipa_core::gangguan::{ekstensi_foto, periksa_foto, StatusGangguan, MAKS_FOTO_BYTES};
 use pipa_core::om::OmError;
 use pipa_core::perawatan::{periksa_jendela, JENDELA_DEFAULT_HARI};
+use pipa_core::{can_read_types, FeatureType};
 use pipa_core::rehab::StatusRehab;
 use pipa_core::tanggal::Tanggal;
 use pipa_core::Role;
@@ -248,6 +249,11 @@ async fn rehab_prioritas(State(state): State<AppState>, Viewer(_): Viewer, Query
 }
 
 async fn om_aset(State(state): State<AppState>, Viewer(user): Viewer, Path(feature_id): Path<i64>) -> Result<Json<Value>, ApiError> {
+    // Aset sr adalah data pelanggan. Panel O&M-nya mengikuti batas baca yang sama dengan peta.
+    let tipe = state.store.tipe_aset(feature_id).await?.ok_or(OmError::TidakDitemukan("aset"))?;
+    if !can_read_types(Some(user.role), &[FeatureType::parse(&tipe)?]) {
+        return Err(ApiError(StatusCode::FORBIDDEN, "aset ini butuh peran editor atau admin".into()));
+    }
     let om = state.store.om_aset(feature_id).await?.ok_or(OmError::TidakDitemukan("aset"))?;
     let mut data = serde_json::to_value(&om).map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if let Some(daftar) = data.get_mut("gangguan").and_then(Value::as_array_mut) {
