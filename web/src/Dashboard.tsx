@@ -7,6 +7,8 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { FeaturesChart } from '@/components/features-chart'
 import { ImportsTable } from '@/components/imports-table'
 import { KelengkapanCard } from './KelengkapanCard'
+import { JatuhTempoCard } from './om/JatuhTempoPanel'
+import { bolehCatat } from './om/omLogic'
 import { SectionCards } from '@/components/section-cards'
 import { SiteHeader } from '@/components/site-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -140,6 +142,7 @@ export function DashboardPage() {
           {unitId !== null && bisaSr && <ImportsTable rows={satuUnit.data?.impor_terakhir ?? []} />}
 
           {bisaKelengkapan && <KelengkapanCard />}
+          {unitId !== null && me.data && <JatuhTempoCard networkId={unitId} bisaCatat={bolehCatat(me.data.role)} />}
         </main>
       </SidebarInset>
     </SidebarProvider>

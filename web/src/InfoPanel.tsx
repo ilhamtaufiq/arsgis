@@ -2,6 +2,7 @@ import type { DesaProps } from './cakupanApi'
 import { ASET_LABEL } from './asetStyle'
 import { AsetAksi } from './AsetEditor'
 import type { PipeFeature } from './types'
+import { OmAsetPanel } from './om/OmAsetPanel'
 
 const LABEL: Record<string, string> = {
   pipa: 'Pipa',
@@ -42,6 +43,7 @@ export function InfoPanel({ feature, onClose, bolehEdit = false }: Props) {
         ))}
       </dl>
       {bolehEdit && <AsetAksi key={feature.id} feature={feature} />}
+      {p.feature_type !== 'sr' && <OmAsetPanel key={`om-${feature.id}`} featureId={feature.id} kondisi={p.kondisi} />}
     </aside>
   )
 }

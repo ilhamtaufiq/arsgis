@@ -3,6 +3,7 @@
 mod auth;
 mod otorisasi;
 mod pelanggan_routes;
+mod om_routes;
 mod sync;
 
 use std::{
@@ -38,11 +39,13 @@ use crate::auth::{clear_cookie_value, session_cookie, set_cookie_value, verify_t
 const MAX_IMPORT_BYTES: usize = 20 * 1024 * 1024;
 
 #[derive(Clone)]
-struct AppState {
-    store: Store,
+pub(crate) struct AppState {
+    pub(crate) store: Store,
     syncer: sync::Syncer,
-    jwt_secret: Vec<u8>,
+    pub(crate) jwt_secret: Vec<u8>,
     cookie_secure: bool,
+    /// Folder foto laporan gangguan (Tahap C).
+    pub(crate) foto_dir: PathBuf,
 }
 
 /// Pengguna dari cookie sesi, atau `None` untuk pengunjung tanpa login.
@@ -58,7 +61,7 @@ impl FromRequestParts<AppState> for MaybeUser {
 }
 
 #[derive(Debug)]
-struct ApiError(StatusCode, String);
+pub(crate) struct ApiError(pub(crate) StatusCode, pub(crate) String);
 
 impl ApiError {
     fn unauthorized() -> Self {
@@ -82,6 +85,7 @@ impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         match e {
             StoreError::TooManyFeatures => ApiError(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
+            StoreError::Om(o) => ApiError::from(o),
             StoreError::Duplicate => ApiError(StatusCode::CONFLICT, "slug sudah dipakai".into()),
             StoreError::Constraint => ApiError(
                 StatusCode::BAD_REQUEST,
@@ -250,7 +254,7 @@ async fn features_geojson(
 }
 
 /// Pengguna yang boleh mengimpor data: editor dan admin.
-struct Editor(CurrentUser);
+pub(crate) struct Editor(pub(crate) CurrentUser);
 
 impl FromRequestParts<AppState> for Editor {
     type Rejection = ApiError;
@@ -827,6 +831,8 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
         .route("/api/v1/imports/{id}", get(get_import))
         .route("/api/v1/imports/{id}/commit", post(commit_import))
         .merge(pelanggan_routes::router())
+        // Operasi dan pemeliharaan (Tahap C): gangguan, perbaikan, jadwal perawatan, dan rehabilitasi.
+        .merge(om_routes::routes())
         // Berkas PMTiles disajikan statis; ServeDir mendukung range request yang dibutuhkan PMTiles.
         .nest_service("/basemap", ServeDir::new(basemap_dir))
         .fallback_service(spa)
@@ -969,7 +975,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let syncer = sync::Syncer::new(store.clone(), sync::SyncConfig::from_env());
     syncer.spawn_schedule();
 
-    let state = AppState { store, syncer, jwt_secret: jwt_secret()?, cookie_secure };
+    let foto_dir = PathBuf::from(env::var("FOTO_DIR").unwrap_or_else(|_| "data/foto".into()));
+    let state = AppState { store, syncer, jwt_secret: jwt_secret()?, cookie_secure, foto_dir };
     let basemap_dir = PathBuf::from(env::var("BASEMAP_DIR").unwrap_or_else(|_| "data".into()));
     let app = router(state, web_dist, basemap_dir);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

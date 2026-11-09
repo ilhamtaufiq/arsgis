@@ -144,7 +144,7 @@ mod tests {
             store.clone(),
             SyncConfig { base_url: "http://127.0.0.1:1".into(), token: None, api_key: None, interval_menit: 0 },
         );
-        let state = AppState { store, syncer, jwt_secret: SECRET.to_vec(), cookie_secure: false };
+        let state = AppState { store, syncer, jwt_secret: SECRET.to_vec(), cookie_secure: false, foto_dir: std::env::temp_dir() };
 
         async fn kode<S: Syarat>(state: &AppState, token: Option<String>) -> Option<StatusCode>
         where

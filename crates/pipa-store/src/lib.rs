@@ -21,6 +21,18 @@ pub use cakupan::{CakupanDesa, DusunCakupan, DusunRow, DusunTulis, SetDusunHasil
 
 mod pelanggan;
 pub use pelanggan::{FilterPelanggan, PelangganRow, PelangganTulis, SrPilihan};
+// Modul O&M (Tahap C).
+mod gangguan;
+mod om_riwayat;
+mod perawatan;
+mod rehab;
+pub use gangguan::{BerkasFoto, FilterGangguan, FotoGangguan, Gangguan, GangguanBaru};
+pub use om_riwayat::{OmAset, RiwayatOm};
+pub use perawatan::{JadwalBaru, JadwalPerawatan, JatuhTempoBaris, Perbaikan, PerbaikanBaru};
+pub use rehab::{AsetRehab, BarisPrioritas};
+
+#[cfg(test)]
+mod om_tests;
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
@@ -42,6 +54,9 @@ pub enum StoreError {
     /// Data di database tidak sesuai aturan aplikasi (mis. feature_type lama yang tidak dikenal).
     #[error("data tidak konsisten: {0}")]
     Data(String),
+    /// Galat aturan O&M dari pipa-core (masukan, aturan, atau tidak ditemukan).
+    #[error("{0}")]
+    Om(#[from] pipa_core::om::OmError),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

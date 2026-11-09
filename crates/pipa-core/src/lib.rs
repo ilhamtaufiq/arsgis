@@ -18,6 +18,12 @@ pub use kode::{format_kode_aset, kode_desa};
 
 mod pelanggan;
 pub use pelanggan::{validasi_pelanggan, GolonganTarif, PelangganIsian, PelangganMasukan, StatusPelanggan};
+// Modul O&M (Tahap C). Dipisah dari aset agar tidak bercampur dengan aturan model aset.
+pub mod gangguan;
+pub mod om;
+pub mod perawatan;
+pub mod rehab;
+pub mod tanggal;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum CoreError {
