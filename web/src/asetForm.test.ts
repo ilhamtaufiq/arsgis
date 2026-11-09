@@ -26,10 +26,19 @@ const TITIK_VALID = (jenis: FeatureType): NilaiForm => ({
 })
 
 describe('aturan jenis', () => {
-  it('ada sebelas jenis dan pipa satu-satunya garis', () => {
-    expect(JENIS_SEMUA).toHaveLength(11)
+  it('ada dua belas jenis dan pipa satu-satunya garis', () => {
+    expect(JENIS_SEMUA).toHaveLength(12)
     const garis = JENIS_SEMUA.filter((j) => geometriUntuk(j) === 'LineString')
     expect(garis).toEqual(['pipa'])
+  })
+
+  it('tapping adalah titik, wajib nama, dan tidak punya kapasitas atau debit', () => {
+    expect(JENIS_SEMUA).toContain('tapping')
+    expect(geometriUntuk('tapping')).toBe('Point')
+    expect(wajibUntuk('tapping')).toEqual(['nama'])
+    expect(ATRIBUT_KAPASITAS.tapping).toBeUndefined()
+    expect(validasiAset('tapping', { ...NILAI_KOSONG }, TAHUN).nama).toBeTruthy()
+    expect(validasiAset('tapping', TITIK_VALID('tapping'), TAHUN)).toEqual({})
   })
 
   it('pipa wajib diameter dan material, bukan nama', () => {

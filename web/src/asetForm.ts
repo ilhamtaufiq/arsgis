@@ -11,16 +11,18 @@ export const LABEL_JENIS: Record<FeatureType, string> = {
   reservoir: 'Reservoir',
   sr: 'Sambungan rumah',
   bronkaptering: 'Bronkaptering',
+  tapping: 'Tapping pipa',
   ...ASET_LABEL,
 }
 
-/** Sebelas jenis fitur, urutan sama dengan `FeatureType` di types.ts. */
+/** Dua belas jenis fitur, urutan sama dengan `FeatureType` di types.ts. */
 export const JENIS_SEMUA: FeatureType[] = [
   'pipa',
   'valve',
   'reservoir',
   'sr',
   'bronkaptering',
+  'tapping',
   'bak_penahan_tekanan',
   'menara_air',
   'hidran_umum',

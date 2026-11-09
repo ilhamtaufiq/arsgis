@@ -22,6 +22,7 @@ const JENIS: Record<string, { label: string; color: string }> = {
   reservoir: { label: 'Reservoir', color: '#0f766e' },
   sr: { label: 'Sambungan rumah', color: '#a16207' },
   bronkaptering: { label: 'Bronkaptering', color: '#0891b2' },
+  tapping: { label: 'Tapping pipa', color: '#65a30d' },
   ...Object.fromEntries(
     Object.entries(ASET_LABEL).map(([k, label]) => [k, { label, color: ASET_COLOR[k as keyof typeof ASET_COLOR] }]),
   ),
