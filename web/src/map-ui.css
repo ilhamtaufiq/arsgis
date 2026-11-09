@@ -158,14 +158,42 @@
 .stage .legend { bottom: calc(var(--map-edge) + var(--map-round) + 16px); }
 .stage.has-panel .legend { left: calc(var(--map-panel-width) + 16px); }
 
-@media (max-width: 480px) {
+/* Ponsel (di bawah 768 px): kontrol memakai target sentuh 44 px. Panel dan kartu info menjadi lembar bawah (tools.css).
+   Kolom atas dan kontrol bawah tetap di tempatnya dan membungkus, tanpa scroll horizontal. */
+@media (max-width: 767px) {
+  .stage {
+    --shift: 0px;
+    --map-round: 44px;
+    --map-search-height: 44px;
+    --map-chip-height: 44px;
+    --map-panel-header: 48px;
+  }
   .stage.has-panel { --shift: 0px; }
   .stage .toolbar { max-width: calc(100% - 24px); left: 50%; }
-  .stage .round { width: 40px; height: 40px; }
-  .leaflet-bottom.leaflet-right { bottom: 56px; }
+  .stage .round { width: 44px; height: 44px; }
+  .leaflet-bottom.leaflet-right { bottom: calc(var(--map-edge) + var(--map-round) + 12px); }
+  .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; }
   /* Kapsul akun pindah ke kanan atas supaya tidak menumpuk di atas zoom. */
   .stage .float-right { top: var(--map-edge); bottom: auto; }
   /* Kolom pencarian turun satu baris, jadi kapsul unit yang lebar tidak menabrak kapsul akun. */
-  .stage .float-top { top: calc(var(--map-edge) + 44px); }
+  .stage .float-top { top: calc(var(--map-edge) + 44px); max-width: calc(100% - 24px); }
+  .stage .chip-row { max-width: 100%; }
+  .stage .island,
+  .stage .island.is-open { width: 100%; }
+  /* Font 16 px mencegah browser iOS memperbesar halaman saat kolom cari difokus. */
+  .stage .island-bar input { font-size: 16px; }
+  .stage .island-results button { min-height: 44px; }
+  .stage .network-select { min-height: 44px; max-width: 100%; }
+  .stage .info {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 70%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--map-radius-lg) var(--map-radius-lg) 0 0;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
   .stage.has-panel .legend { left: 12px; }
 }
