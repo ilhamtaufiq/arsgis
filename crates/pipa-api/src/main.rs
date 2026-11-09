@@ -27,7 +27,7 @@ use axum::{
 use pipa_core::{can_read_types, parse_types, AsetError, AtributAset, AtributPatch, Bbox, CoreError, FeatureType, Izin, Role};
 use pipa_store::{
     fitur_geojson, AsetBaru, AsetUbah, BatalHasil, CatalogInput, CatalogPatch, CommitOutcome, PokmasDesa, PokmasInput,
-    Store, StoreError, StagingRow, TulisHasil,
+    PulihHasil, Store, StoreError, StagingRow, TulisHasil,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -795,6 +795,40 @@ async fn feature_riwayat(State(state): State<AppState>, _: Editor, Path(id): Pat
     Ok(Json(json!({ "data": riwayat })))
 }
 
+#[derive(Deserialize)]
+struct TerhapusParams {
+    limit: Option<i64>,
+    page: Option<i64>,
+}
+
+/// Aset yang sedang terhapus, untuk dipulihkan. Terbaru dihapus di atas.
+async fn daftar_terhapus(
+    State(state): State<AppState>,
+    _: Editor,
+    Query(params): Query<TerhapusParams>,
+) -> Result<Json<Value>, ApiError> {
+    let limit = params.limit.unwrap_or(50);
+    if !(1..=200).contains(&limit) {
+        return Err(bad_request("limit harus antara 1 dan 200"));
+    }
+    let page = params.page.unwrap_or(1);
+    if page < 1 {
+        return Err(bad_request("page harus 1 atau lebih"));
+    }
+    let (daftar, total) = state.store.daftar_terhapus(limit, (page - 1) * limit).await?;
+    Ok(Json(json!({ "data": daftar, "meta": { "page": page, "limit": limit, "total": total } })))
+}
+
+/// Pulihkan aset yang dihapus. Pemeriksaan batas desa dan atribut wajib diulang. Gagal menjawab 422.
+async fn pulihkan_feature(State(state): State<AppState>, Editor(user): Editor, Path(id): Path<i64>) -> Result<Json<Value>, ApiError> {
+    match state.store.pulihkan_aset(id, &user.username).await? {
+        PulihHasil::Berhasil(fitur) => Ok(Json(json!({ "data": fitur_geojson(&fitur) }))),
+        PulihHasil::TidakAda => Err(ApiError(StatusCode::NOT_FOUND, "aset tidak ditemukan".into())),
+        PulihHasil::TidakTerhapus => Err(ApiError(StatusCode::CONFLICT, "aset tidak sedang dihapus".into())),
+        PulihHasil::Ditolak(e) => Err(aset_error(e)),
+    }
+}
+
 fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
     let index = web_dist.join("index.html");
     let spa = ServeDir::new(&web_dist).fallback(tower_http::services::ServeFile::new(index));
@@ -814,6 +848,8 @@ fn router(state: AppState, web_dist: PathBuf, basemap_dir: PathBuf) -> Router {
             axum::routing::patch(patch_feature).delete(delete_feature),
         )
         .route("/api/v1/features/{id}/riwayat", get(feature_riwayat))
+        .route("/api/v1/features/{id}/pulihkan", post(pulihkan_feature))
+        .route("/api/v1/features/terhapus", get(daftar_terhapus))
         .route(
             "/api/v1/imports",
             post(upload_import).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),

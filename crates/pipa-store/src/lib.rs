@@ -10,7 +10,7 @@ mod aset;
 mod catalog_input;
 mod impor_kelola;
 pub use impor_kelola::BatalHasil;
-pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, RiwayatAset, TulisHasil};
+pub use aset::{fitur_geojson, AsetBaru, AsetUbah, FiturLengkap, PulihHasil, RiwayatAset, TerhapusRow, TulisHasil};
 pub use catalog_input::{CatalogInput, CatalogPatch};
 
 mod pokmas;

@@ -2,6 +2,7 @@
 //! ditulis dalam satu transaksi. Aturan atribut dan geometri ada di pipa-core. Pemeriksaan batas desa
 //! dilakukan di sini karena memerlukan poligon dari `ref_batas_desa`.
 
+use pipa_core::impor::periksa_pulih;
 use pipa_core::{
     normalisasi_geometri, periksa_atribut, periksa_kondisi, AsetError, AtributAset, AtributPatch, FeatureType,
 };
@@ -422,5 +423,290 @@ impl Store {
                 })
                 .collect(),
         ))
+    }
+}
+
+/// Hasil pemulihan aset yang terhapus.
+#[derive(Debug)]
+pub enum PulihHasil {
+    Berhasil(FiturLengkap),
+    TidakAda,
+    /// Aset tidak sedang dihapus.
+    TidakTerhapus,
+    /// Aset tidak lagi memenuhi aturan (batas desa, atribut wajib, atau nilai). Selalu 422.
+    Ditolak(AsetError),
+}
+
+/// Baris aset terhapus untuk daftar pemulihan.
+#[derive(Debug, Clone, Serialize)]
+pub struct TerhapusRow {
+    pub id: i64,
+    pub kode_aset: String,
+    pub nama: Option<String>,
+    pub jenis: String,
+    pub deleted_at: String,
+    pub network_id: i64,
+}
+
+/// Memeriksa ulang aturan tambah dan ubah terhadap keadaan aset yang akan dipulihkan. Mengembalikan
+/// penolakan (selalu sebagai `Aturan`) atau None bila aset masih valid. Masukan yang tidak valid ikut menjadi 422.
+async fn periksa_ulang_pulih(
+    tx: &mut Transaction<'_, Postgres>,
+    fitur: &FiturLengkap,
+) -> Result<Option<AsetError>, StoreError> {
+    let jenis = FeatureType::parse(&fitur.feature_type).map_err(|e| StoreError::Data(e.to_string()))?;
+    let geometry = match normalisasi_geometri(jenis, &fitur.geometry) {
+        Ok(g) => g,
+        Err(e) => return Ok(Some(hanya_aturan(e))),
+    };
+    if let Some(e) = tolak_bila_di_luar(cek_batas(tx, fitur.network_id, &geometry).await?) {
+        return Ok(Some(e));
+    }
+    let atribut = fitur.atribut.clone().normalisasi();
+    if let Some(k) = atribut.kondisi.as_deref() {
+        if let Err(e) = periksa_kondisi(k) {
+            return Ok(Some(e));
+        }
+    }
+    if let Err(e) = periksa_atribut(jenis, &atribut) {
+        return Ok(Some(hanya_aturan(e)));
+    }
+    Ok(None)
+}
+
+/// Semua penolakan pemulihan dibuat 422, jadi kesalahan masukan dinaikkan menjadi aturan.
+fn hanya_aturan(e: AsetError) -> AsetError {
+    match e {
+        AsetError::Masukan(m) => AsetError::Aturan(vec![m]),
+        aturan => aturan,
+    }
+}
+
+impl Store {
+    /// Pulihkan aset yang dihapus (soft delete). Batas desa dan atribut wajib diperiksa ulang dengan aturan yang sama
+    /// dengan tambah dan ubah. Baris riwayat `pulihkan` menyimpan keadaan saat terhapus (`sebelum`) dan sesudah pulih.
+    pub async fn pulihkan_aset(&self, id: i64, oleh: &str) -> Result<PulihHasil, StoreError> {
+        let mut tx = self.pool.begin().await?;
+        let Some(row) = sqlx::query(&format!(
+            "SELECT {FITUR_COLS}, deleted_at IS NOT NULL AS terhapus FROM features WHERE id = $1 FOR UPDATE"
+        ))
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        else {
+            return Ok(PulihHasil::TidakAda);
+        };
+        let terhapus: bool = row.try_get("terhapus")?;
+        if periksa_pulih(terhapus).is_err() {
+            return Ok(PulihHasil::TidakTerhapus);
+        }
+        let sebelum = fitur_dari_baris(&row)?;
+        if let Some(e) = periksa_ulang_pulih(&mut tx, &sebelum).await? {
+            return Ok(PulihHasil::Ditolak(e));
+        }
+
+        let sesudah_row = sqlx::query(&format!(
+            "UPDATE features SET deleted_at = NULL WHERE id = $1 RETURNING {FITUR_COLS}"
+        ))
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let sesudah = fitur_dari_baris(&sesudah_row)?;
+        sqlx::query(
+            "INSERT INTO feature_riwayat (feature_id, aksi, diubah_oleh, sebelum, sesudah) \
+             VALUES ($1, 'pulihkan', $2, $3, $4)",
+        )
+        .bind(id)
+        .bind(oleh)
+        .bind(fitur_geojson(&sebelum))
+        .bind(fitur_geojson(&sesudah))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(PulihHasil::Berhasil(sesudah))
+    }
+
+    /// Aset yang sedang terhapus, terbaru dihapus di atas. Mengembalikan halaman dan jumlah seluruhnya.
+    pub async fn daftar_terhapus(&self, limit: i64, offset: i64) -> Result<(Vec<TerhapusRow>, i64), StoreError> {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM features WHERE deleted_at IS NOT NULL")
+            .fetch_one(&self.pool)
+            .await?;
+        let rows = sqlx::query(
+            "SELECT id, kode_aset, nama, feature_type AS jenis, network_id, \
+                    to_char(deleted_at, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS deleted_at \
+             FROM features WHERE deleted_at IS NOT NULL \
+             ORDER BY deleted_at DESC, id DESC LIMIT $1 OFFSET $2",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let daftar = rows
+            .iter()
+            .map(|r| TerhapusRow {
+                id: r.get("id"),
+                kode_aset: r.get("kode_aset"),
+                nama: r.get("nama"),
+                jenis: r.get("jenis"),
+                deleted_at: r.get("deleted_at"),
+                network_id: r.get("network_id"),
+            })
+            .collect();
+        Ok((daftar, total))
+    }
+}
+
+#[cfg(test)]
+mod pulih_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    /// Unit SPAM dengan desa beserta poligon batasnya (kotak 107.0-107.5, -7.0 sampai -6.5).
+    async fn unit_dengan_batas(pool: &PgPool) -> i64 {
+        sqlx::query(
+            "INSERT INTO ref_batas_desa (kode_bps, kecamatan, desa, geom) VALUES ('uji001', 'Uji', 'Uji', \
+             ST_Multi(ST_GeomFromText('POLYGON((107 -7, 107.5 -7, 107.5 -6.5, 107 -6.5, 107 -7))', 4326)))",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO ref_desa (id, nama, kecamatan, kode_bps) VALUES (1, 'Uji', 'Uji', 'uji001')")
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query_scalar("INSERT INTO networks (nama, unit_spam_id, desa_id) VALUES ('Uji unit', 1, 1) RETURNING id")
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    /// Satu pipa lengkap atributnya di dalam batas, lalu langsung dihapus lunak.
+    async fn pipa_terhapus(pool: &PgPool, network: i64) -> i64 {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO features (network_id, feature_type, geom, nama, diameter_mm, material) \
+             VALUES ($1, 'pipa', ST_SetSRID(ST_GeomFromText('LINESTRING(107.1 -6.8, 107.11 -6.8)'), 4326), \
+                     'Pipa uji', 100, 'PVC') RETURNING id",
+        )
+        .bind(network)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        let store = Store::from_pool(pool.clone());
+        assert!(matches!(store.hapus_aset(id, "operator").await.unwrap(), TulisHasil::Berhasil(())));
+        id
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn pulih_aset_terhapus_kembali_dan_mencatat_riwayat(pool: PgPool) {
+        let network = unit_dengan_batas(&pool).await;
+        let id = pipa_terhapus(&pool, network).await;
+        let store = Store::from_pool(pool.clone());
+
+        let hasil = store.pulihkan_aset(id, "editor").await.unwrap();
+        assert!(matches!(hasil, PulihHasil::Berhasil(_)), "hasil: {hasil:?}");
+
+        let deleted: Option<String> = sqlx::query_scalar("SELECT deleted_at::text FROM features WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(deleted.is_none());
+
+        let aksi: String = sqlx::query_scalar(
+            "SELECT aksi FROM feature_riwayat WHERE feature_id = $1 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(aksi, "pulihkan");
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn pulih_aset_yang_tidak_terhapus_ditolak(pool: PgPool) {
+        let network = unit_dengan_batas(&pool).await;
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO features (network_id, feature_type, geom, nama) \
+             VALUES ($1, 'sr', ST_SetSRID(ST_MakePoint(107.1, -6.8), 4326), 'Rumah 1') RETURNING id",
+        )
+        .bind(network)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let store = Store::from_pool(pool);
+        assert!(matches!(store.pulihkan_aset(id, "editor").await.unwrap(), PulihHasil::TidakTerhapus));
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn pulih_aset_di_luar_batas_desa_ditolak_422(pool: PgPool) {
+        let network = unit_dengan_batas(&pool).await;
+        let id = pipa_terhapus(&pool, network).await;
+        // Batas desa berubah setelah aset dihapus: geometri tersimpan kini berada di luar poligon.
+        sqlx::query("UPDATE features SET geom = ST_SetSRID(ST_GeomFromText('LINESTRING(108.1 -6.8, 108.11 -6.8)'), 4326) WHERE id = $1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let store = Store::from_pool(pool.clone());
+
+        match store.pulihkan_aset(id, "editor").await.unwrap() {
+            PulihHasil::Ditolak(AsetError::Aturan(daftar)) => {
+                assert!(daftar.iter().any(|m| m.contains("luar batas")), "pesan: {daftar:?}");
+            }
+            hasil => panic!("seharusnya ditolak sebagai aturan, hasil: {hasil:?}"),
+        }
+        let masih_terhapus: bool =
+            sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM features WHERE id = $1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(masih_terhapus, "aset yang ditolak tidak boleh ikut pulih");
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn pulih_aset_atribut_wajib_kosong_ditolak_422(pool: PgPool) {
+        let network = unit_dengan_batas(&pool).await;
+        let id = pipa_terhapus(&pool, network).await;
+        // Diameter hilang setelah dihapus. Pipa wajib punya diameter.
+        sqlx::query("UPDATE features SET diameter_mm = NULL WHERE id = $1").bind(id).execute(&pool).await.unwrap();
+        let store = Store::from_pool(pool);
+        assert!(matches!(
+            store.pulihkan_aset(id, "editor").await.unwrap(),
+            PulihHasil::Ditolak(AsetError::Aturan(_))
+        ));
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn pulih_aset_tidak_ada(pool: PgPool) {
+        let store = Store::from_pool(pool);
+        assert!(matches!(store.pulihkan_aset(999_999, "editor").await.unwrap(), PulihHasil::TidakAda));
+    }
+
+    #[ignore = "butuh database PostgreSQL"]
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn daftar_terhapus_hanya_memuat_aset_terhapus(pool: PgPool) {
+        let network = unit_dengan_batas(&pool).await;
+        let id = pipa_terhapus(&pool, network).await;
+        let _aktif: i64 = sqlx::query_scalar(
+            "INSERT INTO features (network_id, feature_type, geom, nama) \
+             VALUES ($1, 'sr', ST_SetSRID(ST_MakePoint(107.2, -6.8), 4326), 'Rumah 2') RETURNING id",
+        )
+        .bind(network)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let store = Store::from_pool(pool);
+        let (daftar, total) = store.daftar_terhapus(50, 0).await.unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(daftar.len(), 1);
+        assert_eq!(daftar[0].id, id);
+        assert_eq!(daftar[0].jenis, "pipa");
+        assert_eq!(daftar[0].network_id, network);
     }
 }
