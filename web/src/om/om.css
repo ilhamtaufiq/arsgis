@@ -20,7 +20,7 @@
   gap: 12px;
 }
 .om-header h1 { margin: 0; font-size: 20px; }
-.om-kicker { margin: 0; font-size: 12px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
+.om-kicker { margin: 0; font-size: 12px; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; }
 
 .om-tab { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -86,7 +86,7 @@
 .om-aset h3 { margin: 12px 0 0; font-size: 14px; }
 .om-aset p { margin: 0; overflow-wrap: anywhere; }
 
-.om-muted { opacity: 0.7; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.om-muted { color: #5b6470; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .om-error { color: #b91c1c; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 
 .om-tabel { width: 100%; border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
@@ -115,4 +115,13 @@
 
 .om-picker { display: grid; gap: 4px; }
 .om-picker-peta { height: 240px; width: 100%; border-radius: 6px; border: 1px solid var(--border, #d4d4d8); }
-.om-picker-catatan { margin: 0; font-size: 12px; color: var(--muted-foreground, #71717a); }
+.om-picker-catatan { margin: 0; font-size: 12px; color: #52525b; }
+
+/* Ponsel: target sentuh tombol dan kolom isian 44 px. Tabel sudah digulir di dalam dirinya (.om-tabel). */
+@media (max-width: 767px) {
+  :is(.om-halaman, .om-panel, .om-dua-kolom, .om-aset) button { min-height: 44px; }
+  .om-field input,
+  .om-field select { min-height: 44px; }
+  .om-halaman { padding: 16px; }
+  .om-tabel-wrap, .om-tabel { max-width: 100%; }
+}

@@ -377,7 +377,7 @@ body {
   box-shadow: var(--shadow);
 }
 .banner { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
-.status { background: var(--primary); color: #fff; }
+.status { background: #b8431f; color: #fff; }
 
 /* Kartu info fitur di kanan bawah */
 .info {
@@ -572,7 +572,8 @@ body {
 /* Peta cakupan SPM */
 .info-title { display: grid; gap: 2px; min-width: 0; }
 .info-title strong { font-size: 15px; }
-.info-sub { font-size: 12px; color: var(--muted); }
+/* Warna memakai teks muted, bukan --muted (itu warna latar shadcn dan hampir putih). */
+.info-sub { font-size: 12px; color: #5b6470; }
 .legend {
   position: absolute;
   left: 16px;
@@ -589,3 +590,67 @@ body {
 .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .legend li { display: flex; align-items: center; gap: 8px; color: #374151; }
 .legend .swatch { width: 14px; height: 10px; border-radius: 3px; border: 1px solid rgba(124, 45, 18, 0.25); }
+
+/* Tombol berisi teks putih memakai oranye tua agar kontras AA (putih di #DF5E3A hanya sekitar 3,6:1). */
+.modal-submit,
+.admin-primary,
+.tabs button.is-active,
+.auth-primary {
+  background: #b8431f;
+  border-color: #b8431f;
+}
+
+/* Fokus terlihat untuk semua tombol, tautan, dan input: outline 2 px berwarna aksen. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #DF5E3A;
+  outline-offset: 2px;
+}
+
+/* Keadaan kosong, memuat, dan gagal (components/shared/StatusState.tsx) */
+.status-state {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid #9ca3af;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.status-state-judul { margin: 0; font-weight: 600; }
+.status-state-deskripsi { margin: 0; font-size: 13px; color: var(--text-muted); }
+.status-state-aksi { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.status-state-kosong { border-style: dashed; border-left-style: solid; background: transparent; }
+.status-state-memuat { border-left-color: #DF5E3A; }
+.status-state-gagal { border-left-color: #b91c1c; background: #fef2f2; }
+.status-state-gagal .status-state-judul { color: #991b1b; }
+.status-state-gagal .status-state-deskripsi { color: #7f1d1d; }
+
+/* Ponsel: form satu kolom, target sentuh 44 px. Tabel tetap digulir di dalam pembungkusnya (.dash-table-wrap, .impor-tabel-wrap, [data-slot="table-container"]). */
+@media (max-width: 767px) {
+  .dash-page { padding-left: 16px; padding-right: 16px; min-width: 0; }
+  .admin-form { flex-direction: column; align-items: stretch; }
+  .admin-form input,
+  .admin-form select { flex: none; width: 100%; min-height: 44px; }
+  .admin-primary,
+  .tabs button,
+  .pill,
+  .back { min-height: 44px; }
+  .dash-title select,
+  .network-select { min-height: 44px; }
+  form[aria-label="Data dusun"] { flex-direction: column; align-items: stretch; }
+  form[aria-label="Data dusun"] > * { width: 100%; min-width: 0; }
+}
+
+/* Kurangi gerak: semua animasi dan transisi dimatikan. Keadaan akhir tetap tampil. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
