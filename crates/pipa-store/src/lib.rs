@@ -15,6 +15,16 @@ pub use pokmas::{
     efektifkan, PokmasDetail, PokmasEfektif, PokmasInput, PokmasIsian, PokmasOverride, SumberPokmas,
 };
 
+// Modul O&M (Tahap C).
+mod gangguan;
+mod om_riwayat;
+mod perawatan;
+mod rehab;
+pub use gangguan::{BerkasFoto, FilterGangguan, FotoGangguan, Gangguan, GangguanBaru};
+pub use om_riwayat::{OmAset, RiwayatOm};
+pub use perawatan::{JadwalBaru, JadwalPerawatan, JatuhTempoBaris, Perbaikan, PerbaikanBaru};
+pub use rehab::{AsetRehab, BarisPrioritas};
+
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 /// Batas jumlah fitur per permintaan. Di atas ini, gunakan vector tiles (fase lanjutan).
@@ -35,6 +45,9 @@ pub enum StoreError {
     /// Data di database tidak sesuai aturan aplikasi (mis. feature_type lama yang tidak dikenal).
     #[error("data tidak konsisten: {0}")]
     Data(String),
+    /// Galat aturan O&M dari pipa-core (masukan, aturan, atau tidak ditemukan).
+    #[error("{0}")]
+    Om(#[from] pipa_core::om::OmError),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
