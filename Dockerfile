@@ -28,8 +28,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --home-dir /app app \
- && mkdir -p /app/web /app/data /data/basemap \
- && chown app /data/basemap
+ && mkdir -p /app/web /app/data /data/basemap /data/foto \
+ && chown app /data/basemap /data/foto
 WORKDIR /app
 COPY --from=api /usr/local/bin/pipa-api /app/pipa-api
 COPY --from=web /src/web/dist /app/web/dist
@@ -39,6 +39,7 @@ COPY data/batas-desa-cianjur.geojson /app/data/batas-desa-cianjur.geojson
 ENV PORT=8080 \
     WEB_DIST=/app/web/dist \
     BASEMAP_DIR=/data/basemap \
+    FOTO_DIR=/data/foto \
     COOKIE_SECURE=true \
     RUST_LOG=pipa_api=info,tower_http=info
 USER app

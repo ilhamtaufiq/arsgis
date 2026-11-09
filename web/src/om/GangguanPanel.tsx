@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { LokasiPicker } from './LokasiPicker'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ambilGangguan,
@@ -177,6 +178,14 @@ function FormLaporan({ networkId, onSimpan }: { networkId: number; onSimpan: (g:
             <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} />
           </label>
         </div>
+        <LokasiPicker
+          lon={lon === '' ? null : Number(lon)}
+          lat={lat === '' ? null : Number(lat)}
+          onPilih={(x, y) => {
+            setLon(String(x))
+            setLat(String(y))
+          }}
+        />
         <label className="om-field">
           ID aset terkait (opsional)
           <input type="number" min={1} value={featureId} onChange={(e) => setFeatureId(e.target.value)} />

@@ -39,10 +39,14 @@ services:
       ARUMANIS_TOKEN: ${ARUMANIS_TOKEN:-}
       ARUMANIS_SYNC_MENIT: ${ARUMANIS_SYNC_MENIT:-60}
       RUST_LOG: ${RUST_LOG:-pipa_api=info,tower_http=info}
+      FOTO_DIR: /data/foto
     volumes:
       # Berkas basemap-cianjur.pmtiles ditaruh di sini (lihat README, bagian Deploy di Coolify).
       - arsgis-basemap:/data/basemap
+      # Foto laporan gangguan. Volume ini wajib agar foto tidak hilang saat redeploy.
+      - arsgis-foto:/data/foto
 
 volumes:
   arsgis-db:
   arsgis-basemap:
+  arsgis-foto:
