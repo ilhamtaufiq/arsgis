@@ -60,7 +60,7 @@ export function ImporPage() {
     setSibuk(true)
     setGalat(null)
     try {
-      const { ditulis, dilewati } = await commitImport(staged.id, networkId)
+      const { ditulis, dilewati } = await commitImport(staged.id, networkId, false)
       setPesan(`${ditulis} fitur disimpan${dilewati > 0 ? `, ${dilewati} dilewati karena di luar batas desa` : ''}.`)
       setStaged(null)
       setFile(null)

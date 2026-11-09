@@ -79,3 +79,30 @@ export async function fetchRiwayat(id: number): Promise<EntriRiwayat[]> {
 export function adalahFitur(v: unknown): v is PipeFeature {
   return typeof v === 'object' && v !== null && 'id' in v && 'properties' in v
 }
+
+/** Aset yang sudah dihapus (soft delete) dan masih bisa dipulihkan. */
+export type AsetTerhapus = {
+  id: number
+  kode_aset: string | null
+  nama: string | null
+  jenis: string
+  deleted_at: string
+  network_id: number
+}
+
+export type HalamanTerhapus = { data: AsetTerhapus[]; meta: { total: number; page: number; last_page: number } }
+
+/** GET /api/v1/features/terhapus. Respons berisi `data` dan `meta` untuk paginasi. */
+export async function fetchAsetTerhapus(limit: number, page: number): Promise<HalamanTerhapus> {
+  const res = await fetch(`/api/v1/features/terhapus?${new URLSearchParams({ limit: String(limit), page: String(page) })}`)
+  if (!res.ok) throw await galat(res)
+  return (await res.json()) as HalamanTerhapus
+}
+
+/** POST /api/v1/features/{id}/pulihkan. Mengembalikan id aset yang dipulihkan. */
+export async function pulihkanAset(id: number): Promise<number> {
+  const res = await fetch(`/api/v1/features/${id}/pulihkan`, { method: 'POST' })
+  if (!res.ok) throw await galat(res)
+  const body = (await res.json()) as { data: { id: number } }
+  return body.data.id
+}
