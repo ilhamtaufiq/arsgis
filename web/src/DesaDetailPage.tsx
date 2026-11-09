@@ -12,6 +12,7 @@ import {
   type PokmasEfektif,
   type SumberPokmas,
 } from './desaDetailApi'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -122,6 +123,7 @@ function PokmasCard({ id, role }: { id: number; role: Role | null }) {
   const bisaEdit = role === 'editor' || role === 'admin'
   const [mengedit, setMengedit] = useState(false)
   const [pesan, setPesan] = useState<string | null>(null)
+  const [konfirmasiKembali, setKonfirmasiKembali] = useState(false)
   const pokmas = useQuery({
     queryKey: ['desa-pokmas', id, role],
     queryFn: () => fetchDesaPokmas(id),
@@ -210,11 +212,7 @@ function PokmasCard({ id, role }: { id: number; role: Role | null }) {
                     size="sm"
                     variant="outline"
                     disabled={sedangKirim}
-                    onClick={() => {
-                      if (window.confirm('Kembalikan Pokmas desa ini ke data Arumanis? Koreksi yang tersimpan di arsgis akan dihapus.')) {
-                        kembalikan.mutate()
-                      }
-                    }}
+                    onClick={() => setKonfirmasiKembali(true)}
                   >
                     Kembalikan ke data Arumanis
                   </Button>
@@ -223,6 +221,20 @@ function PokmasCard({ id, role }: { id: number; role: Role | null }) {
             )}
           </>
         )}
+
+        <ConfirmDialog
+          open={konfirmasiKembali}
+          judul="Kembalikan ke data Arumanis?"
+          pesan="Koreksi Pokmas yang tersimpan di arsgis akan dihapus. Data hasil sinkron Arumanis dipakai lagi."
+          labelAksi="Ya, kembalikan"
+          nada="bahaya"
+          sibuk={kembalikan.isPending}
+          onBatal={() => setKonfirmasiKembali(false)}
+          onKonfirmasi={() => {
+            setKonfirmasiKembali(false)
+            kembalikan.mutate()
+          }}
+        />
 
         {pesan && <p className="text-sm text-destructive">{pesan}</p>}
       </CardContent>
